@@ -319,6 +319,8 @@
             const modelSelect = document.getElementById('model');
             const selectedModel = modelSelect.value;
             
+            console.log('Updating model to:', selectedModel);  // Debug log
+            
             fetch('/select_model', {
                 method: 'POST',
                 headers: {
@@ -329,13 +331,14 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Server response:', data);  // Debug log
                 if (data.status === 'success') {
                     // Update UI for the new model type
                     updateUI();
                     updateLoadingText();
                     showMessage('success', data.message);
                 } else {
-                    showMessage('error', data.message);
+                    showMessage('error', data.message || 'Failed to update model');
                 }
             })
             .catch(error => {
@@ -344,12 +347,32 @@
             });
         }
 
+        function toggleHistoryItem(id) {
+            const content = document.getElementById(`history-content-${id}`);
+            const button = document.getElementById(`history-toggle-${id}`);
+            
+            if (content.classList.contains('h-32')) {
+                // Expand
+                content.classList.remove('h-32', 'overflow-hidden');
+                button.textContent = 'Show Less';
+                button.setAttribute('aria-expanded', 'true');
+            } else {
+                // Collapse
+                content.classList.add('h-32', 'overflow-hidden');
+                button.textContent = 'Show More';
+                button.setAttribute('aria-expanded', 'false');
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initial selected model:', '{{ selected_model }}');  // Debug log
+            
             const modelSelect = document.getElementById('model');
             const fileInput = document.getElementById('file');
             
             modelSelect.addEventListener('change', () => {
-                updateModel();  // Call this first to persist the selection
+                console.log('Model changed to:', modelSelect.value);  // Debug log
+                updateModel();
             });
             
             fileInput.addEventListener('change', updateLoadingText);
@@ -371,7 +394,12 @@
                             
                             <!-- Navigation -->
                             <div class="flex justify-between items-center mb-8">
-                                <a href="/" class="text-indigo-600 hover:text-indigo-500 font-medium">Home</a>
+                                <a href="/" class="text-indigo-600 hover:text-indigo-500 font-medium flex items-center">
+                                    <svg class="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                                    </svg>
+                                    Home
+                                </a>
                                 <div class="relative">
                                     <button id="debugButton" 
                                             onclick="toggleDebugDropdown()" 
@@ -398,76 +426,118 @@
                                 </div>
                             </div>
 
-                            <form method="post" action="/analyze" enctype="multipart/form-data">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                
-                                <!-- Model Selection -->
-                                <div class="mb-6">
-                                    <label for="model" class="block text-sm font-medium text-gray-700">Select Model:</label>
-                                    <select id="model" name="model" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                                        {% for model in models %}
-                                            <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
-                                        {% endfor %}
-                                    </select>
+                            <!-- Main Content -->
+                            <div class="space-y-8">
+                                <!-- Current Analysis Section -->
+                                <div class="bg-white shadow sm:rounded-lg">
+                                    <div class="px-4 py-5 sm:p-6">
+                                        <form method="post" action="/analyze" enctype="multipart/form-data">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            
+                                            <!-- Model Selection -->
+                                            <div class="mb-6">
+                                                <label for="model" class="block text-sm font-medium text-gray-700">Select Model:</label>
+                                                <select id="model" name="model" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                                    {% for model in models %}
+                                                        <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <div id="modelMessage" class="hidden mt-2 text-sm"></div>
+                                            </div>
+
+                                            <!-- File Upload Section -->
+                                            <div id="fileSection" class="mb-6">
+                                                <div class="flex items-center">
+                                                    <label id="fileLabel" for="file" class="block text-sm font-medium text-gray-700">Upload File:</label>
+                                                    <span id="fileRequired" class="ml-2 text-sm text-gray-500">(Optional)</span>
+                                                </div>
+                                                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                                                    <div class="space-y-1 text-center">
+                                                        <div class="flex text-sm text-gray-600">
+                                                            <label for="file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+                                                                <span>Upload a file</span>
+                                                                <input id="file" name="file" type="file" class="sr-only">
+                                                            </label>
+                                                        </div>
+                                                        <p id="fileDescription" class="text-xs text-gray-500">Supported file types will be shown based on model</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Prompt Input -->
+                                            <div class="mb-6">
+                                                <label for="prompt" id="promptLabel" class="block text-sm font-medium text-gray-700">Prompt:</label>
+                                                <div class="mt-1">
+                                                    <textarea id="prompt" name="prompt" rows="3" class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border border-gray-300 rounded-md" placeholder="Enter your prompt or select from the suggestions below"></textarea>
+                                                </div>
+                                            </div>
+
+                                            <!-- Quick Prompts -->
+                                            <div id="promptButtons" class="mb-6 space-y-2">
+                                                <!-- Prompt buttons will be dynamically inserted here -->
+                                            </div>
+
+                                            <!-- Submit Button -->
+                                            <div class="flex justify-center">
+                                                <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                                    Analyze
+                                                </button>
+                                            </div>
+                                        </form>
+
+                                        <!-- Loading indicator -->
+                                        <div id="loading" class="hidden mt-6">
+                                            <div class="flex items-center justify-center space-x-3 bg-gray-50 p-4 rounded-md">
+                                                <div class="animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+                                                <p id="loadingText" class="text-gray-700">Processing...</p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Results Section -->
+                                        {% if result %}
+                                        <div class="mt-6">
+                                            <h2 class="text-lg font-medium text-gray-900 mb-2">Results:</h2>
+                                            <div class="bg-gray-50 rounded-lg p-4">
+                                                <pre class="whitespace-pre-wrap text-sm text-gray-700">{{ result }}</pre>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    </div>
                                 </div>
 
-                                <!-- File Upload Section -->
-                                <div id="fileSection" class="mb-6">
-                                    <div class="flex items-center">
-                                        <label id="fileLabel" for="file" class="block text-sm font-medium text-gray-700">Upload File:</label>
-                                        <span id="fileRequired" class="ml-2 text-sm text-gray-500">(Optional)</span>
-                                    </div>
-                                    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                                        <div class="space-y-1 text-center">
-                                            <div class="flex text-sm text-gray-600">
-                                                <label for="file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
-                                                    <span>Upload a file</span>
-                                                    <input id="file" name="file" type="file" class="sr-only">
-                                                </label>
+                                <!-- History Section -->
+                                {% if history %}
+                                <div class="bg-white shadow sm:rounded-lg mt-8">
+                                    <div class="px-4 py-5 sm:p-6">
+                                        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Analysis History</h3>
+                                        <div class="space-y-4">
+                                            {% for item in history|reverse %}
+                                            <div class="border rounded-lg p-4 {% if item.success %}bg-green-50 border-green-200{% else %}bg-red-50 border-red-200{% endif %}">
+                                                <div class="flex justify-between items-start mb-2">
+                                                    <div class="text-sm text-gray-500">{{ item.timestamp }}</div>
+                                                    <div class="text-sm font-medium {% if item.success %}text-green-700{% else %}text-red-700{% endif %}">
+                                                        {{ item.model }}
+                                                    </div>
+                                                </div>
+                                                <div class="text-sm font-medium text-gray-900 mb-2">{{ item.prompt }}</div>
+                                                <div id="history-content-{{ loop.index }}" class="text-sm text-gray-600 whitespace-pre-wrap h-32 overflow-hidden transition-all duration-200">{{ item.result }}</div>
+                                                <div class="flex justify-between items-center mt-2">
+                                                    <div class="text-xs text-gray-500">Duration: {{ "%.2f"|format(item.duration) }} seconds</div>
+                                                    <button 
+                                                        id="history-toggle-{{ loop.index }}"
+                                                        onclick="toggleHistoryItem('{{ loop.index }}')"
+                                                        class="text-sm text-indigo-600 hover:text-indigo-500 focus:outline-none"
+                                                        aria-expanded="false">
+                                                        Show More
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <p id="fileDescription" class="text-xs text-gray-500">Supported file types will be shown based on model</p>
+                                            {% endfor %}
                                         </div>
                                     </div>
                                 </div>
-
-                                <!-- Prompt Input -->
-                                <div class="mb-6">
-                                    <label for="prompt" id="promptLabel" class="block text-sm font-medium text-gray-700">Prompt:</label>
-                                    <div class="mt-1">
-                                        <textarea id="prompt" name="prompt" rows="3" class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border border-gray-300 rounded-md" placeholder="Enter your prompt or select from the suggestions below"></textarea>
-                                    </div>
-                                </div>
-
-                                <!-- Quick Prompts -->
-                                <div id="promptButtons" class="mb-6 space-y-2">
-                                    <!-- Prompt buttons will be dynamically inserted here -->
-                                </div>
-
-                                <!-- Submit Button -->
-                                <div class="flex justify-center">
-                                    <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                        Analyze
-                                    </button>
-                                </div>
-                            </form>
-
-                            <!-- Loading indicator -->
-                            <div id="loading" class="hidden mt-6">
-                                <div class="flex items-center justify-center space-x-3 bg-gray-50 p-4 rounded-md">
-                                    <div class="animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
-                                    <p id="loadingText" class="text-gray-700">Processing...</p>
-                                </div>
+                                {% endif %}
                             </div>
-
-                            <!-- Results Section -->
-                            {% if result %}
-                            <div class="mt-6">
-                                <h2 class="text-lg font-medium text-gray-900 mb-2">Results:</h2>
-                                <div class="bg-gray-50 rounded-lg p-4">
-                                    <pre class="whitespace-pre-wrap text-sm text-gray-700">{{ result }}</pre>
-                                </div>
-                            </div>
-                            {% endif %}
                         </div>
                     </div>
                 </div>

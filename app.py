@@ -84,8 +84,8 @@ def models():
         return jsonify([])
 
 @app.route('/')
-def index():
-    """Render the main page."""
+def home():
+    """Home page route."""
     try:
         logger.debug('Loading index page...')
         models_list = get_available_models()
@@ -95,24 +95,38 @@ def index():
         current_debug_level = session.get('debug_level', 'INFO')
         logger.setLevel(getattr(logging, current_debug_level))
         
-        # Get selected model from session or use default
+        # Get selected model from session or use first available
         selected_model = session.get('selected_model')
-        if selected_model not in models_list and models_list:
+        logger.debug(f'Model from session: {selected_model}')
+        
+        if not selected_model and models_list:
             selected_model = models_list[0]
             session['selected_model'] = selected_model
+            logger.debug(f'Setting default model: {selected_model}')
+        elif selected_model not in models_list and models_list:
+            selected_model = models_list[0]
+            session['selected_model'] = selected_model
+            logger.debug(f'Previous model not found, setting to: {selected_model}')
+        
+        logger.debug(f'Using selected model: {selected_model}')
+        
+        # Get history from session
+        history = session.get('history', [])
         
         return render_template('index.html',
                              models=models_list,
                              debug_levels=DEBUG_LEVELS,
                              current_debug_level=current_debug_level,
-                             selected_model=selected_model)
+                             selected_model=selected_model,
+                             history=history)
     except Exception as e:
         logger.error(f'Error rendering index: {str(e)}', exc_info=True)
         return render_template('index.html',
                              models=[],
                              debug_levels=DEBUG_LEVELS,
-                             current_debug_level=logger.getEffectiveLevel(),
-                             error=str(e))
+                             current_debug_level=current_debug_level,
+                             error=str(e),
+                             history=[])
 
 @app.route('/select_model', methods=['POST'])
 def select_model():
@@ -122,6 +136,7 @@ def select_model():
         logger.info(f'Setting selected model to: {model}')
         
         if not model:
+            logger.error('No model specified in request')
             return jsonify({
                 'status': 'error',
                 'message': 'No model specified'
@@ -129,6 +144,7 @@ def select_model():
         
         # Store in session
         session['selected_model'] = model
+        logger.debug(f'Stored model in session: {model}')
         
         return jsonify({
             'status': 'success',
@@ -143,43 +159,27 @@ def select_model():
             'message': f'Error setting model: {str(e)}'
         }), 500
 
-def is_vision_model(model_name):
-    """Check if a model is a vision model based on its name or capabilities."""
-    vision_indicators = ['vision', 'llava', 'image']
-    return any(indicator in model_name.lower() for indicator in vision_indicators)
-
-def get_supported_file_types(model_name):
-    """Get supported file types based on model capabilities."""
-    if is_vision_model(model_name):
-        return {
-            'extensions': ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
-            'description': 'Images (JPG, PNG, GIF, etc.)',
-            'type': 'image/*',
-            'required': True
-        }
-    else:
-        return {
-            'extensions': ['txt', 'md', 'pdf', 'doc', 'docx', 'csv', 'json'],
-            'description': 'Documents (TXT, PDF, DOC, etc.)',
-            'type': 'application/pdf,text/plain,.doc,.docx,.md,.csv,.json',
-            'required': False
-        }
-
 @app.route('/analyze', methods=['POST'])
 def analyze():
     """Analyze an image or process a text prompt."""
     start_time = datetime.now()
-    model = request.form.get('model', 'llama2-vision')
+    model = request.form.get('model')
     prompt = request.form.get('prompt', 'Analyze this.')
-    is_vision = is_vision_model(model)
-    file_types = get_supported_file_types(model)
-    
-    # Store selected model in session
-    session['selected_model'] = model
     
     try:
         logger.info(f'Starting analysis with model: {model}')
         logger.info(f'Prompt: {prompt}')
+        
+        # Update session with current model if provided, otherwise use session model
+        if model:
+            session['selected_model'] = model
+            logger.debug(f'Updated session model to: {model}')
+        else:
+            model = session.get('selected_model')
+            logger.debug(f'Using model from session: {model}')
+        
+        is_vision = is_vision_model(model)
+        file_types = get_supported_file_types(model)
         
         # Check if file is required but not provided
         if file_types['required'] and 'file' not in request.files:
@@ -269,34 +269,79 @@ def analyze():
         
         result = response['message']['content']
         end_time = datetime.now()
-        time_elapsed = end_time - start_time
+        duration = (end_time - start_time).total_seconds()
         
-        timing_info = f"\n\nTiming Information:\nStart Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\nEnd Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}\nTime Elapsed: {time_elapsed.total_seconds():.2f} seconds"
-        result_with_timing = result + timing_info
+        # Format response with timing
+        result_with_timing = f"Response (took {duration:.2f} seconds):\n\n{result}"
+        
+        # Add to history
+        history = session.get('history', [])
+        history.append({
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'model': model,
+            'prompt': prompt,
+            'result': result_with_timing,
+            'duration': duration,
+            'success': True
+        })
+        session['history'] = history
         
         logger.info('Analysis completed successfully')
-        logger.info(f'Time elapsed: {time_elapsed.total_seconds():.2f} seconds')
-        
         return render_template('index.html', 
                              models=get_available_models(),
                              debug_levels=DEBUG_LEVELS,
                              current_debug_level=session.get('debug_level', 'INFO'),
-                             result=result_with_timing)
+                             selected_model=model,
+                             result=result_with_timing,
+                             history=history)
     
     except Exception as e:
+        logger.exception('Error during analysis')
         end_time = datetime.now()
-        time_elapsed = end_time - start_time
-        error_with_timing = f"Error: {str(e)}\n\nTiming Information:\nStart Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\nEnd Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}\nTime Elapsed: {time_elapsed.total_seconds():.2f} seconds"
+        duration = (end_time - start_time).total_seconds()
+        error_with_timing = f"Error (after {duration:.2f} seconds): {str(e)}"
         
-        # Clean up the uploaded file in case of error
-        if 'filepath' in locals() and os.path.exists(filepath):
-            os.remove(filepath)
-        logger.error(f'Error analyzing request: {str(e)}')
+        # Add error to history
+        history = session.get('history', [])
+        history.append({
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'model': model,
+            'prompt': prompt,
+            'result': error_with_timing,
+            'duration': duration,
+            'success': False
+        })
+        session['history'] = history
+        
         return render_template('index.html', 
                              models=get_available_models(),
                              debug_levels=DEBUG_LEVELS,
                              current_debug_level=session.get('debug_level', 'INFO'),
-                             result=error_with_timing)
+                             selected_model=model,
+                             result=error_with_timing,
+                             history=history)
+
+def is_vision_model(model_name):
+    """Check if a model is a vision model based on its name or capabilities."""
+    vision_indicators = ['vision', 'llava', 'image']
+    return any(indicator in model_name.lower() for indicator in vision_indicators)
+
+def get_supported_file_types(model_name):
+    """Get supported file types based on model capabilities."""
+    if is_vision_model(model_name):
+        return {
+            'extensions': ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
+            'description': 'Images (JPG, PNG, GIF, etc.)',
+            'type': 'image/*',
+            'required': True
+        }
+    else:
+        return {
+            'extensions': ['txt', 'md', 'pdf', 'doc', 'docx', 'csv', 'json'],
+            'description': 'Documents (TXT, PDF, DOC, etc.)',
+            'type': 'application/pdf,text/plain,.doc,.docx,.md,.csv,.json',
+            'required': False
+        }
 
 def get_available_models():
     """Get list of available models from Ollama."""

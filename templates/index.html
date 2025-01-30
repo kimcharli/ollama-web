@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Vision & Text Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        const VISION_PROMPTS = {
+            'describe': 'Describe this image in detail.',
+            'objects': 'List and describe all objects you can see in this image.',
+            'text': 'Read and transcribe any text visible in this image.',
+            'subject': 'What is the main subject or focus of this image?',
+            'colors': 'Describe the colors, lighting, and overall mood of this image.',
+            'people': 'Describe any people in the image, their appearance, expressions, and actions.',
+            'location': 'What type of location or setting is shown in this image?',
+            'technical': 'Analyze the technical aspects of this image (composition, lighting, focus, etc).',
+            'emotions': 'What emotions or feelings does this image convey?',
+            'compare': 'Compare and contrast the different elements in this image.',
+            'style': 'What is the artistic or photographic style of this image?',
+            'brand': 'Identify any brands, logos, or commercial elements in this image.'
+        };
+
+        const TEXT_PROMPTS = {
+            'summarize': 'Provide a concise summary of the main points.',
+            'analyze': 'Analyze the key themes and ideas in this text.',
+            'explain': 'Explain this content in simple terms.',
+            'critique': 'Provide a critical analysis of this content.',
+            'extract': 'Extract the key facts and figures from this text.',
+            'structure': 'Analyze the structure and organization of this content.',
+            'sentiment': 'What is the overall tone and sentiment of this text?',
+            'action': 'What are the main action items or recommendations?',
+            'technical': 'Explain any technical terms or concepts in this text.',
+            'compare': 'Compare different viewpoints or arguments presented.',
+            'timeline': 'Create a timeline of events mentioned in this text.',
+            'questions': 'Generate key questions this text answers or raises.'
+        };
+
+        function isVisionModel(modelName) {
+            const visionIndicators = ['vision', 'llava', 'image'];
+            return visionIndicators.some(indicator => modelName.toLowerCase().includes(indicator));
+        }
+
+        function updatePromptButtons() {
+            const modelSelect = document.getElementById('model');
+            const promptButtons = document.getElementById('promptButtons');
+            const isVision = isVisionModel(modelSelect.value);
+            const prompts = isVision ? VISION_PROMPTS : TEXT_PROMPTS;
+            
+            // Clear existing buttons
+            promptButtons.innerHTML = '';
+            
+            // Create category containers
+            const mainPrompts = document.createElement('div');
+            mainPrompts.className = 'mb-4';
+            const additionalPrompts = document.createElement('div');
+            additionalPrompts.className = 'mb-2';
+            
+            // Add prompt buttons
+            Object.entries(prompts).forEach(([key, prompt], index) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 mb-2 mr-2';
+                button.onclick = () => document.getElementById('prompt').value = prompt;
+                button.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+                
+                // Add main prompts to top row
+                if (index < 4) {
+                    mainPrompts.appendChild(button);
+                } else {
+                    additionalPrompts.appendChild(button);
+                }
+            });
+            
+            // Add toggle button for additional prompts
+            const toggleButton = document.createElement('button');
+            toggleButton.type = 'button';
+            toggleButton.className = 'text-sm text-indigo-600 hover:text-indigo-500 mb-2';
+            toggleButton.onclick = () => {
+                additionalPrompts.classList.toggle('hidden');
+                toggleButton.textContent = additionalPrompts.classList.contains('hidden') ? 'Show More Prompts ▼' : 'Show Less Prompts ▲';
+            };
+            toggleButton.textContent = 'Show More Prompts ▼';
+            
+            // Add elements to container
+            promptButtons.appendChild(mainPrompts);
+            promptButtons.appendChild(toggleButton);
+            promptButtons.appendChild(additionalPrompts);
+            additionalPrompts.classList.add('hidden');
+        }
+
+        function updateUI() {
+            const modelSelect = document.getElementById('model');
+            const selectedModel = modelSelect.value;
+            const isVision = isVisionModel(selectedModel);
+            const fileInput = document.getElementById('file');
+            const fileLabel = document.getElementById('fileLabel');
+            const fileDescription = document.getElementById('fileDescription');
+            const promptLabel = document.getElementById('promptLabel');
+            const loadingText = document.getElementById('loadingText');
+            const fileRequired = document.getElementById('fileRequired');
+            
+            if (isVision) {
+                fileLabel.textContent = 'Upload Image:';
+                fileDescription.textContent = 'PNG, JPG, GIF up to 10MB';
+                fileInput.accept = 'image/*';
+                fileInput.required = true;
+                promptLabel.textContent = 'Image Analysis Prompt:';
+                loadingText.textContent = 'Analyzing image...';
+                fileRequired.textContent = '(Required)';
+                fileRequired.classList.remove('text-gray-500');
+                fileRequired.classList.add('text-red-500');
+            } else {
+                fileLabel.textContent = 'Upload Document:';
+                fileDescription.textContent = 'TXT, PDF, DOC, CSV up to 10MB';
+                fileInput.accept = '.txt,.pdf,.doc,.docx,.csv,.json,.md';
+                fileInput.required = false;
+                promptLabel.textContent = 'Prompt:';
+                loadingText.textContent = 'Processing...';
+                fileRequired.textContent = '(Optional)';
+                fileRequired.classList.remove('text-red-500');
+                fileRequired.classList.add('text-gray-500');
+            }
+            
+            updatePromptButtons();
+        }
+
+        function updateLoadingText() {
+            const fileInput = document.getElementById('file');
+            const loadingText = document.getElementById('loadingText');
+            const modelSelect = document.getElementById('model');
+            const isVision = isVisionModel(modelSelect.value);
+            
+            if (fileInput.files.length > 0) {
+                const fileName = fileInput.files[0].name;
+                const fileExt = fileName.split('.').pop().toLowerCase();
+                
+                if (isVision) {
+                    loadingText.textContent = 'Analyzing image...';
+                } else if (['pdf', 'doc', 'docx'].includes(fileExt)) {
+                    loadingText.textContent = 'Analyzing document...';
+                } else if (['txt', 'md'].includes(fileExt)) {
+                    loadingText.textContent = 'Analyzing text...';
+                } else if (['csv', 'json'].includes(fileExt)) {
+                    loadingText.textContent = 'Analyzing data file...';
+                } else {
+                    loadingText.textContent = 'Processing...';
+                }
+            } else {
+                loadingText.textContent = 'Processing prompt...';
+            }
+        }
+
+        function setDebugLevel(level) {
+            const debugButton = document.getElementById('debugButton');
+            const buttonText = document.getElementById('debugButtonText');
+            const dropdown = document.getElementById('debugDropdown');
+            
+            fetch('/debug_level', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: 'level=' + level
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Update button text with new level
+                    buttonText.textContent = 'Debug Level: ' + data.current_debug_level;
+                    
+                    // Hide dropdown
+                    dropdown.classList.add('hidden');
+                    
+                    // Update active state in dropdown
+                    document.querySelectorAll('.debug-level-item').forEach(item => {
+                        const itemLevel = item.getAttribute('data-level');
+                        if (itemLevel === data.current_debug_level) {
+                            item.classList.add('bg-gray-100');
+                            item.setAttribute('aria-selected', 'true');
+                        } else {
+                            item.classList.remove('bg-gray-100');
+                            item.setAttribute('aria-selected', 'false');
+                        }
+                    });
+                    
+                    // Show success message
+                    showMessage('success', data.message);
+                } else {
+                    // Show error message
+                    showMessage('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('error', 'Failed to set debug level');
+            });
+        }
+
+        function showMessage(type, message) {
+            const messageDiv = document.getElementById('message');
+            if (!messageDiv) {
+                return;
+            }
+            
+            messageDiv.textContent = message;
+            messageDiv.className = `mt-2 text-sm ${type === 'error' ? 'text-red-600' : 'text-green-600'}`;
+            messageDiv.classList.remove('hidden');
+            
+            // Hide message after 3 seconds
+            setTimeout(() => {
+                messageDiv.classList.add('hidden');
+            }, 3000);
+        }
+
+        function toggleDebugDropdown() {
+            const dropdown = document.getElementById('debugDropdown');
+            dropdown.classList.toggle('hidden');
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+            const debugButton = document.getElementById('debugButton');
+            const dropdown = document.getElementById('debugDropdown');
+            
+            if (!debugButton.contains(event.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        function refreshModels() {
+            const refreshBtn = document.getElementById('refresh-models');
+            const modelSelect = document.getElementById('model');
+            const currentModel = modelSelect.value;
+
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+
+            fetch('/models')
+                .then(response => response.json())
+                .then(models => {
+                    modelSelect.innerHTML = '';
+                    if (models.length > 0) {
+                        models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model;
+                            option.textContent = model;
+                            if (model === currentModel) {
+                                option.selected = true;
+                            }
+                            modelSelect.appendChild(option);
+                        });
+                    } else {
+                        const option = document.createElement('option');
+                        option.value = '';
+                        option.textContent = 'No models found - Install models via Ollama first';
+                        option.disabled = true;
+                        modelSelect.appendChild(option);
+                    }
+                })
+                .finally(() => {
+                    refreshBtn.disabled = false;
+                    refreshBtn.innerHTML = '<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>';
+                });
+        }
+
+        function setPrompt(prompt) {
+            document.getElementById('prompt').value = prompt;
+        }
+
+        function submitForm(event) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const formData = new FormData(form);
+            const submitButton = form.querySelector('button[type="submit"]');
+            const resultDiv = document.getElementById('result');
+            const loadingDiv = document.getElementById('loading');
+            
+            // Show loading state
+            submitButton.disabled = true;
+            loadingDiv.classList.remove('hidden');
+            resultDiv.classList.add('hidden');
+            
+            fetch('/analyze', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: formData
+            })
+            .then(response => response.text())
+            .then(html => {
+                // Extract the result div content from the response
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newResult = doc.querySelector('#result');
+                if (newResult) {
+                    resultDiv.innerHTML = newResult.innerHTML;
+                    resultDiv.classList.remove('hidden');
+                }
+            })
+            .catch(error => {
+                resultDiv.innerHTML = `
+                    <div class="mt-6 p-4 bg-red-50 rounded-md">
+                        <h2 class="text-lg font-semibold mb-2 text-red-700">Error:</h2>
+                        <p class="text-red-600">${error.message}</p>
+                    </div>`;
+                resultDiv.classList.remove('hidden');
+            })
+            .finally(() => {
+                submitButton.disabled = false;
+                loadingDiv.classList.add('hidden');
+            });
+        }
+
+        function updateModel() {
+            const modelSelect = document.getElementById('model');
+            const selectedModel = modelSelect.value;
+            
+            fetch('/select_model', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: 'model=' + encodeURIComponent(selectedModel)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Update UI for the new model type
+                    updateUI();
+                    updateLoadingText();
+                    showMessage('success', data.message);
+                } else {
+                    showMessage('error', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showMessage('error', 'Failed to update model selection');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const modelSelect = document.getElementById('model');
+            const fileInput = document.getElementById('file');
+            
+            modelSelect.addEventListener('change', () => {
+                updateModel();  // Call this first to persist the selection
+            });
+            
+            fileInput.addEventListener('change', updateLoadingText);
+            
+            // Initial UI update
+            updateUI();
+            updateLoadingText();
+        });
+    </script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen py-6 flex flex-col justify-center sm:py-12">
+        <div class="relative py-3 sm:max-w-xl sm:mx-auto">
+            <div class="relative px-4 py-10 bg-white mx-8 md:mx-0 shadow rounded-3xl sm:p-10">
+                <div class="max-w-md mx-auto">
+                    <div class="divide-y divide-gray-200">
+                        <div class="py-8 text-base leading-6 space-y-4 text-gray-700 sm:text-lg sm:leading-7">
+                            <h1 class="text-2xl font-bold text-center mb-8 text-indigo-600">Ollama Vision & Text Analysis</h1>
+                            
+                            <!-- Navigation -->
+                            <div class="flex justify-between items-center mb-8">
+                                <a href="/" class="text-indigo-600 hover:text-indigo-500 font-medium">Home</a>
+                                <div class="relative">
+                                    <button id="debugButton" 
+                                            onclick="toggleDebugDropdown()" 
+                                            type="button" 
+                                            class="inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                        <span id="debugButtonText">Debug Level: {{ current_debug_level }}</span>
+                                        <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                        </svg>
+                                    </button>
+                                    <div id="debugDropdown" class="hidden origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-gray-100">
+                                        <div class="py-1">
+                                            {% for level in debug_levels %}
+                                            <button onclick="setDebugLevel('{{ level }}')" 
+                                                    class="debug-level-item block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 {% if level == current_debug_level %}bg-gray-100{% endif %}"
+                                                    data-level="{{ level }}"
+                                                    aria-selected="{% if level == current_debug_level %}true{% else %}false{% endif %}">
+                                                {{ level }}
+                                            </button>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    <div id="message" class="hidden mt-2 text-sm"></div>
+                                </div>
+                            </div>
+
+                            <form method="post" action="/analyze" enctype="multipart/form-data">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                
+                                <!-- Model Selection -->
+                                <div class="mb-6">
+                                    <label for="model" class="block text-sm font-medium text-gray-700">Select Model:</label>
+                                    <select id="model" name="model" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                        {% for model in models %}
+                                            <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <!-- File Upload Section -->
+                                <div id="fileSection" class="mb-6">
+                                    <div class="flex items-center">
+                                        <label id="fileLabel" for="file" class="block text-sm font-medium text-gray-700">Upload File:</label>
+                                        <span id="fileRequired" class="ml-2 text-sm text-gray-500">(Optional)</span>
+                                    </div>
+                                    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                                        <div class="space-y-1 text-center">
+                                            <div class="flex text-sm text-gray-600">
+                                                <label for="file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+                                                    <span>Upload a file</span>
+                                                    <input id="file" name="file" type="file" class="sr-only">
+                                                </label>
+                                            </div>
+                                            <p id="fileDescription" class="text-xs text-gray-500">Supported file types will be shown based on model</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Prompt Input -->
+                                <div class="mb-6">
+                                    <label for="prompt" id="promptLabel" class="block text-sm font-medium text-gray-700">Prompt:</label>
+                                    <div class="mt-1">
+                                        <textarea id="prompt" name="prompt" rows="3" class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border border-gray-300 rounded-md" placeholder="Enter your prompt or select from the suggestions below"></textarea>
+                                    </div>
+                                </div>
+
+                                <!-- Quick Prompts -->
+                                <div id="promptButtons" class="mb-6 space-y-2">
+                                    <!-- Prompt buttons will be dynamically inserted here -->
+                                </div>
+
+                                <!-- Submit Button -->
+                                <div class="flex justify-center">
+                                    <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                        Analyze
+                                    </button>
+                                </div>
+                            </form>
+
+                            <!-- Loading indicator -->
+                            <div id="loading" class="hidden mt-6">
+                                <div class="flex items-center justify-center space-x-3 bg-gray-50 p-4 rounded-md">
+                                    <div class="animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+                                    <p id="loadingText" class="text-gray-700">Processing...</p>
+                                </div>
+                            </div>
+
+                            <!-- Results Section -->
+                            {% if result %}
+                            <div class="mt-6">
+                                <h2 class="text-lg font-medium text-gray-900 mb-2">Results:</h2>
+                                <div class="bg-gray-50 rounded-lg p-4">
+                                    <pre class="whitespace-pre-wrap text-sm text-gray-700">{{ result }}</pre>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

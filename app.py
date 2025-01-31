@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, jsonify, session, Response
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
 import ollama
+from history_manager import HistoryManager
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +20,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'  # Required for CSRF
 app.config['UPLOAD_FOLDER'] = 'uploads'
 csrf = CSRFProtect(app)
+
+# Initialize history manager
+history_manager = HistoryManager()
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -87,46 +91,29 @@ def models():
 def home():
     """Home page route."""
     try:
-        logger.debug('Loading index page...')
-        models_list = get_available_models()
-        logger.debug(f'Models for index page: {models_list}')
-        
-        # Get debug level from session or use default
-        current_debug_level = session.get('debug_level', 'INFO')
-        logger.setLevel(getattr(logging, current_debug_level))
-        
-        # Get selected model from session or use first available
+        models = get_available_models()
         selected_model = session.get('selected_model')
-        logger.debug(f'Model from session: {selected_model}')
         
-        if not selected_model and models_list:
-            selected_model = models_list[0]
+        if not selected_model and models:
+            selected_model = models[0]
             session['selected_model'] = selected_model
-            logger.debug(f'Setting default model: {selected_model}')
-        elif selected_model not in models_list and models_list:
-            selected_model = models_list[0]
-            session['selected_model'] = selected_model
-            logger.debug(f'Previous model not found, setting to: {selected_model}')
         
-        logger.debug(f'Using selected model: {selected_model}')
-        
-        # Get history from session
-        history = session.get('history', [])
+        # Load history from file
+        history = history_manager.get_history(limit=10)  # Show last 10 entries
         
         return render_template('index.html',
-                             models=models_list,
+                             models=models,
                              debug_levels=DEBUG_LEVELS,
-                             current_debug_level=current_debug_level,
+                             current_debug_level=session.get('debug_level', 'INFO'),
                              selected_model=selected_model,
                              history=history)
     except Exception as e:
-        logger.error(f'Error rendering index: {str(e)}', exc_info=True)
+        logger.exception('Error in home route')
         return render_template('index.html',
                              models=[],
                              debug_levels=DEBUG_LEVELS,
-                             current_debug_level=current_debug_level,
-                             error=str(e),
-                             history=[])
+                             current_debug_level=session.get('debug_level', 'INFO'),
+                             error=str(e))
 
 @app.route('/select_model', methods=['POST'])
 def select_model():
@@ -274,17 +261,14 @@ def analyze():
         # Format response with timing
         result_with_timing = f"Response (took {duration:.2f} seconds):\n\n{result}"
         
-        # Add to history
-        history = session.get('history', [])
-        history.append({
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'model': model,
-            'prompt': prompt,
-            'result': result_with_timing,
-            'duration': duration,
-            'success': True
-        })
-        session['history'] = history
+        # Add to persistent history
+        history = history_manager.add_entry(
+            model=model,
+            prompt=prompt,
+            result=result_with_timing,
+            duration=duration,
+            success=True
+        )
         
         logger.info('Analysis completed successfully')
         return render_template('index.html', 
@@ -301,17 +285,14 @@ def analyze():
         duration = (end_time - start_time).total_seconds()
         error_with_timing = f"Error (after {duration:.2f} seconds): {str(e)}"
         
-        # Add error to history
-        history = session.get('history', [])
-        history.append({
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'model': model,
-            'prompt': prompt,
-            'result': error_with_timing,
-            'duration': duration,
-            'success': False
-        })
-        session['history'] = history
+        # Add error to persistent history
+        history = history_manager.add_entry(
+            model=model,
+            prompt=prompt,
+            result=error_with_timing,
+            duration=duration,
+            success=False
+        )
         
         return render_template('index.html', 
                              models=get_available_models(),
@@ -320,6 +301,16 @@ def analyze():
                              selected_model=model,
                              result=error_with_timing,
                              history=history)
+
+@app.route('/clear_history', methods=['POST'])
+def clear_history():
+    """Clear all history."""
+    try:
+        history_manager.clear_history()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.exception('Error clearing history')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 def is_vision_model(model_name):
     """Check if a model is a vision model based on its name or capabilities."""

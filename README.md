@@ -24,9 +24,10 @@ A web application that leverages Ollama's models to analyze both images and docu
 
 ## Prerequisites
 
-- Python 3.10 or higher
+- Python 3.10 (managed by pyenv)
 - [Ollama](https://ollama.ai/) installed and running
 - At least one model installed (e.g., llama2, llava)
+- [uv](https://astral.sh/uv) package manager
 
 ## Installation
 
@@ -36,9 +37,15 @@ A web application that leverages Ollama's models to analyze both images and docu
    cd llama-vision
    ```
 
-2. Install dependencies using `uv`:
+2. Ensure correct Python version:
    ```bash
-   uv pip install -e .
+   # Verify Python version matches .python-version
+   python --version  # Should show Python 3.10.x
+   ```
+
+3. Install dependencies using `uv`:
+   ```bash
+   uv install
    ```
 
 ## Running the Application
@@ -52,11 +59,7 @@ A web application that leverages Ollama's models to analyze both images and docu
    ```bash
    uv run app.py
    ```
-
-3. Open your web browser and navigate to:
-   ```
-   http://localhost:5000
-   ```
+   The application will be available at http://127.0.0.1:5000
 
 ## Usage
 

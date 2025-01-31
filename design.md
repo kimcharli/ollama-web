@@ -78,6 +78,45 @@ A web application built with Flask and the Ollama API for image and document ana
 - Werkzeug (for file handling)
 - Python standard library
 
+## Development Environment
+
+### Prerequisites
+- Python 3.10 (managed by pyenv)
+- Ollama server running locally
+- uv package manager
+
+### Setup and Running
+1. Clone the repository
+2. Ensure Python 3.10 is active:
+   ```bash
+   # Check .python-version file
+   cat .python-version  # Should show 3.10
+   
+   # Verify Python version
+   python --version    # Should show Python 3.10.x
+   ```
+
+3. Run the application:
+   ```bash
+   # Start the development server
+   uv run app.py
+   ```
+   The application will be available at http://127.0.0.1:5000
+
+### Development Notes
+- The application uses Flask's development server with debug mode enabled
+- File uploads are stored temporarily in the `uploads` directory
+- Query history is stored in `query_history.json`
+- CSRF protection is enabled for all form submissions
+
+### Troubleshooting
+- If `uv` command is not found, install it using:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- Ensure Ollama server is running locally before starting the application
+- Check the Flask debug output for any errors (debug PIN is shown in console)
+
 ## Future Enhancements (Planned)
 - [ ] User authentication
 - [ ] Save favorite prompts

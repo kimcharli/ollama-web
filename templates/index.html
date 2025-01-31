@@ -269,6 +269,44 @@
             document.getElementById('prompt').value = prompt;
         }
 
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear all history?')) {
+                fetch('/clear_history', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Remove history section
+                        const historySection = document.querySelector('.history-section');
+                        if (historySection) {
+                            historySection.remove();
+                        }
+                        showMessage('success', 'History cleared successfully');
+                    } else {
+                        showMessage('error', 'Failed to clear history');
+                    }
+                })
+                .catch(error => {
+                    showMessage('error', 'Failed to clear history: ' + error.message);
+                });
+            }
+        }
+
+        function reusePrompt(prompt, model) {
+            document.getElementById('prompt').value = prompt;
+            const modelSelect = document.getElementById('model');
+            if (modelSelect.value !== model) {
+                modelSelect.value = model;
+                updateUI();
+            }
+            // Scroll to prompt
+            document.getElementById('prompt').scrollIntoView({ behavior: 'smooth' });
+        }
+
         function submitForm(event) {
             event.preventDefault();
             
@@ -280,8 +318,12 @@
             
             // Show loading state
             submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="animate-pulse">Analyzing...</span>';
             loadingDiv.classList.remove('hidden');
             resultDiv.classList.add('hidden');
+            
+            // Update loading text based on input
+            updateLoadingText();
             
             fetch('/analyze', {
                 method: 'POST',
@@ -311,6 +353,7 @@
             })
             .finally(() => {
                 submitButton.disabled = false;
+                submitButton.innerHTML = 'Analyze';
                 loadingDiv.classList.add('hidden');
             });
         }
@@ -369,13 +412,13 @@
             
             const modelSelect = document.getElementById('model');
             const fileInput = document.getElementById('file');
-            
-            modelSelect.addEventListener('change', () => {
-                console.log('Model changed to:', modelSelect.value);  // Debug log
-                updateModel();
-            });
-            
+
+            // Add event listeners
             fileInput.addEventListener('change', updateLoadingText);
+            modelSelect.addEventListener('change', () => {
+                updateUI();
+                updateLoadingText();
+            });
             
             // Initial UI update
             updateUI();
@@ -507,9 +550,17 @@
 
                                 <!-- History Section -->
                                 {% if history %}
-                                <div class="bg-white shadow sm:rounded-lg mt-8">
+                                <div class="bg-white shadow sm:rounded-lg mt-8 history-section">
                                     <div class="px-4 py-5 sm:p-6">
-                                        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Analysis History</h3>
+                                        <div class="flex justify-between items-center mb-4">
+                                            <h3 class="text-lg leading-6 font-medium text-gray-900">Analysis History</h3>
+                                            <button 
+                                                onclick="clearHistory()"
+                                                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                            >
+                                                Clear History
+                                            </button>
+                                        </div>
                                         <div class="space-y-4">
                                             {% for item in history|reverse %}
                                             <div class="border rounded-lg p-4 {% if item.success %}bg-green-50 border-green-200{% else %}bg-red-50 border-red-200{% endif %}">
@@ -519,15 +570,24 @@
                                                         {{ item.model }}
                                                     </div>
                                                 </div>
-                                                <div class="text-sm font-medium text-gray-900 mb-2">{{ item.prompt }}</div>
+                                                <div class="flex justify-between items-start gap-2">
+                                                    <div class="text-sm font-medium text-gray-900 mb-2 flex-grow">{{ item.prompt }}</div>
+                                                    <button 
+                                                        onclick="reusePrompt('{{ item.prompt|replace("'", "\\'") }}', '{{ item.model }}')"
+                                                        class="shrink-0 text-sm text-indigo-600 hover:text-indigo-500 focus:outline-none"
+                                                    >
+                                                        Reuse Prompt
+                                                    </button>
+                                                </div>
                                                 <div id="history-content-{{ loop.index }}" class="text-sm text-gray-600 whitespace-pre-wrap h-32 overflow-hidden transition-all duration-200">{{ item.result }}</div>
                                                 <div class="flex justify-between items-center mt-2">
-                                                    <div class="text-xs text-gray-500">Duration: {{ "%.2f"|format(item.duration) }} seconds</div>
+                                                    <div class="text-xs text-gray-500">Duration: {{ "%.2f"|format(item.duration) }}s</div>
                                                     <button 
                                                         id="history-toggle-{{ loop.index }}"
                                                         onclick="toggleHistoryItem('{{ loop.index }}')"
                                                         class="text-sm text-indigo-600 hover:text-indigo-500 focus:outline-none"
-                                                        aria-expanded="false">
+                                                        aria-expanded="false"
+                                                    >
                                                         Show More
                                                     </button>
                                                 </div>

@@ -2,48 +2,68 @@ import json
 import os
 from datetime import datetime
 from typing import List, Dict, Any
+from config import Config
 
 class HistoryManager:
-    def __init__(self, history_file: str = 'query_history.json'):
-        self.history_file = history_file
-        self._ensure_history_file()
-
-    def _ensure_history_file(self):
-        """Create history file if it doesn't exist"""
+    """Manages the history of queries and results."""
+    
+    def __init__(self, history_file='query_history.json', max_entries=100):
+        """Initialize the history manager.
+        
+        Args:
+            history_file (str): Path to the history file
+            max_entries (int): Maximum number of entries to keep in history
+        """
+        self.history_file = history_file or Config.HISTORY_FILE
+        self.max_entries = max_entries or Config.MAX_HISTORY_ENTRIES
+        
+        # Create history file if it doesn't exist
         if not os.path.exists(self.history_file):
-            with open(self.history_file, 'w') as f:
-                json.dump([], f)
-
+            self.save_history([])
+    
     def load_history(self) -> List[Dict[str, Any]]:
-        """Load history from file"""
+        """Load history from file."""
         try:
-            with open(self.history_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r') as f:
+                    history = json.load(f)
+                    # Ensure we don't exceed max entries
+                    return history[-self.max_entries:]
             return []
-
+        except Exception as e:
+            print(f"Error loading history: {e}")
+            return []
+    
     def save_history(self, history: List[Dict[str, Any]]):
-        """Save history to file"""
-        with open(self.history_file, 'w') as f:
-            json.dump(history, f, indent=2)
-
+        """Save history to file."""
+        try:
+            with open(self.history_file, 'w') as f:
+                json.dump(history, f, indent=2)
+        except Exception as e:
+            print(f"Error saving history: {e}")
+    
     def add_entry(self, model: str, prompt: str, result: str, duration: float, success: bool):
-        """Add a new entry to history"""
+        """Add a new entry to history."""
         history = self.load_history()
+        
+        # Create new entry
         entry = {
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'timestamp': datetime.now().isoformat(),
             'model': model,
             'prompt': prompt,
             'result': result,
             'duration': duration,
             'success': success
         }
+        
+        # Add to end of list
         history.append(entry)
         
-        # Keep only the last 100 entries
-        if len(history) > 100:
-            history = history[-100:]
-            
+        # Trim to max entries
+        if len(history) > self.max_entries:
+            history = history[-self.max_entries:]
+        
+        # Save updated history
         self.save_history(history)
         return history
 
@@ -55,5 +75,5 @@ class HistoryManager:
         return history
 
     def clear_history(self):
-        """Clear all history"""
+        """Clear all history."""
         self.save_history([])

@@ -3,32 +3,37 @@ import secrets
 import logging
 import requests
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, session, Response
+from flask import Flask, render_template, request, jsonify, session, send_from_directory
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.utils import secure_filename
-import ollama
+from config import Config
 from history_manager import HistoryManager
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Constants
+DEBUG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
+VISION_MODELS = {'llava', 'bakllava'}  # Add other vision models as needed
+
+# Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'  # Required for CSRF
-app.config['UPLOAD_FOLDER'] = 'uploads'
+
+# Initialize configuration
+Config.init_app(app)
+
+# Initialize CSRF protection
 csrf = CSRFProtect(app)
 
 # Initialize history manager
-history_manager = HistoryManager()
+history_manager = HistoryManager(app.config['HISTORY_FILE'], app.config['MAX_HISTORY_ENTRIES'])
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Debug levels for the UI
-DEBUG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+DEBUG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 
 @app.route('/debug_level', methods=['POST'])
 def set_debug_level():
@@ -44,32 +49,24 @@ def set_debug_level():
                 'message': f'Invalid debug level: {level}. Must be one of {DEBUG_LEVELS}'
             }), 400
         
-        # Convert string level to logging constant
-        numeric_level = getattr(logging, level)
-        
-        # Set the logger level
-        logger.setLevel(numeric_level)
-        
-        # Store in session
+        # Set the debug level in session
         session['debug_level'] = level
         
-        # Log at new level to verify change
+        # Log messages at different levels for testing
         logger.debug('Debug message - should show if level is DEBUG or lower')
         logger.info('Info message - should show if level is INFO or lower')
         logger.warning('Warning message - should show if level is WARNING or lower')
         logger.error('Error message - should show if level is ERROR or lower')
         
         logger.info(f'Successfully set debug level to: {level}')
-        
         return jsonify({
             'status': 'success',
-            'level': level,
             'current_debug_level': level,
             'message': f'Debug level set to {level}'
         })
         
     except Exception as e:
-        logger.exception('Error setting debug level')
+        logger.error(f'Error setting debug level: {str(e)}', exc_info=True)
         return jsonify({
             'status': 'error',
             'message': f'Error setting debug level: {str(e)}'
@@ -91,59 +88,87 @@ def models():
 def home():
     """Home page route."""
     try:
+        # Get available models
         models = get_available_models()
-        selected_model = session.get('selected_model')
+        model_names = [model['name'] for model in models]
         
-        if not selected_model and models:
-            selected_model = models[0]
+        # Get selected model from session or use default
+        selected_model = session.get('selected_model')
+        if not selected_model and model_names:
+            selected_model = model_names[0]
             session['selected_model'] = selected_model
         
-        # Load history from file
-        history = history_manager.get_history(limit=10)  # Show last 10 entries
+        # Get current debug level
+        current_debug_level = session.get('debug_level', 'INFO')
         
+        # Get prompts for model type
+        prompts = app.config.get('PROMPTS', {})
+        if not prompts:
+            prompts = {
+                'vision_models': {'default': '', 'suggestions': []},
+                'text_models': {'default': '', 'suggestions': []}
+            }
+        
+        # Determine model type and get prompts
+        if selected_model:
+            model_type = 'vision_models' if is_vision_model(selected_model) else 'text_models'
+            model_prompts = prompts.get(model_type, {})
+            default_prompt = model_prompts.get('default', '')
+            prompt_suggestions = model_prompts.get('suggestions', [])
+        else:
+            default_prompt = ''
+            prompt_suggestions = []
+        
+        # Render template with data
         return render_template('index.html',
-                             models=models,
-                             debug_levels=DEBUG_LEVELS,
-                             current_debug_level=session.get('debug_level', 'INFO'),
-                             selected_model=selected_model,
-                             history=history)
+                            models=models,
+                            selected_model=selected_model,
+                            default_prompt=default_prompt,
+                            prompt_suggestions=prompt_suggestions,
+                            prompts=prompts,
+                            debug_levels=DEBUG_LEVELS,
+                            current_debug_level=current_debug_level,
+                            history=history_manager.load_history())
     except Exception as e:
-        logger.exception('Error in home route')
-        return render_template('index.html',
-                             models=[],
-                             debug_levels=DEBUG_LEVELS,
-                             current_debug_level=session.get('debug_level', 'INFO'),
-                             error=str(e))
+        app.logger.error(f"Error in home route: {e}")
+        return render_template('index.html', error=str(e))
 
 @app.route('/select_model', methods=['POST'])
 def select_model():
-    """Set the selected model."""
+    """Handle model selection"""
     try:
         model = request.form.get('model')
-        logger.info(f'Setting selected model to: {model}')
-        
         if not model:
-            logger.error('No model specified in request')
-            return jsonify({
-                'status': 'error',
-                'message': 'No model specified'
-            }), 400
-        
-        # Store in session
+            return jsonify({'status': 'error', 'message': 'No model specified'}), 400
+
+        # Store selected model in session
         session['selected_model'] = model
-        logger.debug(f'Stored model in session: {model}')
-        
+
+        # Determine model type and get prompts
+        model_type = 'vision_models' if is_vision_model(model) else 'text_models'
+        prompts = app.config.get('PROMPTS', {})
+        if not prompts:
+            prompts = {
+                'vision_models': {'default': '', 'suggestions': []},
+                'text_models': {'default': '', 'suggestions': []}
+            }
+
+        model_prompts = prompts.get(model_type, {})
+        default_prompt = model_prompts.get('default', '')
+        prompt_suggestions = model_prompts.get('suggestions', [])
+
         return jsonify({
             'status': 'success',
             'model': model,
-            'message': f'Selected model: {model}'
+            'default_prompt': default_prompt,
+            'prompt_suggestions': prompt_suggestions
         })
-        
+
     except Exception as e:
-        logger.exception('Error setting model')
+        app.logger.error(f"Error in select_model: {e}")
         return jsonify({
             'status': 'error',
-            'message': f'Error setting model: {str(e)}'
+            'message': str(e)
         }), 500
 
 @app.route('/analyze', methods=['POST'])
@@ -313,9 +338,9 @@ def clear_history():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 def is_vision_model(model_name):
-    """Check if a model is a vision model based on its name or capabilities."""
-    vision_indicators = ['vision', 'llava', 'image']
-    return any(indicator in model_name.lower() for indicator in vision_indicators)
+    """Check if a model is a vision model."""
+    vision_models = ['llava', 'bakllava']  # Add more vision models as needed
+    return any(vm in model_name.lower() for vm in vision_models)
 
 def get_supported_file_types(model_name):
     """Get supported file types based on model capabilities."""
@@ -335,34 +360,17 @@ def get_supported_file_types(model_name):
         }
 
 def get_available_models():
-    """Get list of available models from Ollama."""
+    """Get list of available models."""
     try:
-        logger.debug('Attempting to connect to Ollama...')
-        
-        # Direct API call to Ollama
-        response = requests.get('http://localhost:11434/api/tags')
-        logger.debug(f'Raw Ollama response status: {response.status_code}')
-        logger.debug(f'Raw Ollama response: {response.json()}')
-        
+        response = requests.get(f"{Config.OLLAMA_HOST}/api/tags")
         if response.status_code == 200:
-            data = response.json()
-            if 'models' in data:
-                models = sorted([model['name'] for model in data['models']])
-            else:
-                models = sorted([model['name'] for model in data.get('models', [])])
-            logger.info(f'Found {len(models)} models: {models}')
-            return models
-        else:
-            logger.warning(f'Ollama API returned status code: {response.status_code}')
-            return []
-            
-    except requests.exceptions.ConnectionError as e:
-        logger.error(f'Failed to connect to Ollama server: {str(e)}')
+            models = response.json().get('models', [])
+            return models if models else []
         return []
     except Exception as e:
-        logger.error(f'Error fetching models: {str(e)}', exc_info=True)
+        app.logger.error(f"Error getting models: {e}")
         return []
 
 if __name__ == '__main__':
-    logger.setLevel(logging.DEBUG)  # Set default level to DEBUG
-    app.run(debug=True)
+    logger.setLevel(logging.INFO)  # Set default level to INFO
+    app.run(debug=True, port=5002)

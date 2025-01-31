@@ -1,0 +1,22 @@
+{
+  "vision_models": {
+    "default": "What do you see in this image?",
+    "suggestions": [
+      "What do you see in this image?",
+      "Describe this image in detail",
+      "What objects are present in this image?",
+      "Analyze the composition of this image",
+      "What is the main subject of this image?"
+    ]
+  },
+  "text_models": {
+    "default": "Please analyze this text:",
+    "suggestions": [
+      "Please analyze this text:",
+      "Summarize this document",
+      "What are the key points in this text?",
+      "Extract the main ideas from this text",
+      "Provide a detailed analysis of this text"
+    ]
+  }
+}

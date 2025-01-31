@@ -11,15 +11,22 @@ A web application that leverages Ollama's models to analyze both images and docu
 - 🔄 **Real-time Model Discovery**: Automatically discovers available models from your local Ollama installation
 - 📝 **Dynamic Prompts**: Context-aware prompts based on model type
 - 🔍 **Debug Levels**: Adjustable logging levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-- 📊 **Analysis History**: Keep track of all analyses with:
-  - Timestamps
-  - Duration tracking
+- 📊 **Analysis History**: 
+  - Persistent storage in query_history.json
+  - Complete history of all analyses
+  - Reuse previous prompts
+  - Clear history option
+  - Timestamps and duration tracking
   - Success/Error status
   - Collapsible results view
 - 💾 **Session Persistence**: 
   - Selected model persists across refreshes
   - Debug level settings are maintained
-- ⏳ **Loading Indicators**: Visual feedback during analysis
+- ⏳ **Progress Indication**: 
+  - Analyze button shows active state
+  - Context-aware loading messages
+  - Visual loading spinner
+  - Button disabled during analysis
 - 🏠 **Home Navigation**: Easy navigation with modern UI
 
 ## Prerequisites
@@ -96,6 +103,65 @@ A web application that leverages Ollama's models to analyze both images and docu
    - Adjust debug level via dropdown
    - Settings persist across sessions
    - Clear visual feedback for current level
+
+## Configuration
+
+The application can be configured using environment variables or a `.env` file. Copy the example `.env` file and modify as needed:
+
+```bash
+cp .env.example .env
+```
+
+Available configuration options:
+
+```ini
+# Flask Configuration
+FLASK_SECRET_KEY=your-secret-key-here    # Secret key for session management
+FLASK_DEBUG=True                         # Enable/disable debug mode
+
+# File Storage
+UPLOAD_FOLDER=uploads                    # Directory for uploaded files
+HISTORY_FILE=query_history.json          # File to store analysis history
+MAX_HISTORY_ENTRIES=100                  # Maximum number of history entries to keep
+
+# Ollama Configuration
+OLLAMA_HOST=http://localhost:11434       # Ollama API host
+
+# Prompts Configuration
+PROMPTS_FILE=prompts.json                # File containing model prompts
+```
+
+All configuration values have sensible defaults in `config.py` if not specified in the environment.
+
+### Customizing Prompts
+
+The application loads model prompts from a JSON file specified by `PROMPTS_FILE`. The file should have the following structure:
+
+```json
+{
+  "vision_models": {
+    "default": "Default prompt for vision models",
+    "suggestions": [
+      "Prompt suggestion 1",
+      "Prompt suggestion 2",
+      ...
+    ]
+  },
+  "text_models": {
+    "default": "Default prompt for text models",
+    "suggestions": [
+      "Prompt suggestion 1",
+      "Prompt suggestion 2",
+      ...
+    ]
+  }
+}
+```
+
+To customize the prompts:
+1. Copy the default `prompts.json` file
+2. Modify the prompts as needed
+3. Update `PROMPTS_FILE` in your `.env` file if using a different filename
 
 ## Project Structure
 

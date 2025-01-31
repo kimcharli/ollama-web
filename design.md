@@ -33,6 +33,7 @@ A web application built with Flask and the Ollama API for image and document ana
 - [x] Dropdown menu for easy level switching
 
 ### Analysis History
+- [x] Persistent file storage of analysis history in `query_history.json`
 - [x] Chronological history of analyses
 - [x] Success/Error status indication
 - [x] Timestamp tracking
@@ -40,11 +41,18 @@ A web application built with Flask and the Ollama API for image and document ana
 - [x] Collapsible result view
 - [x] Model used for each analysis
 - [x] Prompt used for each analysis
+- [x] History survives server restarts
+- [x] Reuse prompts from history
+- [x] Clear history functionality
 
 ### User Interface
 - [x] Clean, modern design using Tailwind CSS
 - [x] Responsive layout
-- [x] Loading indicators with timing information
+- [x] Analysis progress indication:
+  - Analyze button shows "Analyzing..." state
+  - Animated loading spinner during analysis
+  - Context-aware loading messages based on input type
+  - Button disabled during analysis
 - [x] Home navigation with icon
 - [x] Clear error messages and validation feedback
 - [x] Collapsible sections for better space management
@@ -54,6 +62,17 @@ A web application built with Flask and the Ollama API for image and document ana
 - [x] File type validation
 - [x] File size limits
 - [x] Secure file handling with cleanup
+
+### Configuration Management
+- [x] Environment-based configuration using `.env` file
+- [x] Configurable settings:
+  - Flask configuration (secret key, debug mode)
+  - File storage paths (uploads, history file)
+  - History management (max entries)
+  - Ollama host configuration
+- [x] Default values for all settings
+- [x] Easy deployment configuration
+- [x] Centralized config management in `config.py`
 
 ## Technical Requirements
 

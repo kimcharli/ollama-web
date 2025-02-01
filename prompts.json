@@ -2,6 +2,7 @@
   "text_models": {
     "default": "You are a helpful AI assistant. Please help me with my question.",
     "suggestions": [
+      "What is the population of Korea?",
       "You are a helpful AI assistant. Please help me with my question.",
       "Explain this concept in simple terms.",
       "Help me debug this code.",

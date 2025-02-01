@@ -24,44 +24,11 @@ class FetchManager:
     def fetch_models_list(self) -> Optional[Dict[str, Any]]:
         """Fetch list of local models from Ollama."""
         try:
-            # Use the ollama CLI to get local models
-            import subprocess
-            import re
-            
-            logger.info("Fetching local models using ollama list")
-            result = subprocess.run(['ollama', 'list'], 
-                                  capture_output=True, 
-                                  text=True)
-            if result.returncode != 0:
-                raise Exception(f"ollama list failed: {result.stderr}")
-                
-            # Parse the output
-            models = []
-            lines = result.stdout.strip().split('\n')
-            if len(lines) > 1:  # Skip header if present
-                for line in lines[1:]:
-                    if line.strip():
-                        # Parse space-separated columns
-                        parts = re.split(r'\s{2,}', line.strip())
-                        if len(parts) >= 4:
-                            name, model_id, size, modified = parts[:4]
-                            name = name.split(':')[0]  # Remove version tag
-                            models.append({
-                                'name': name,
-                                'model': name,
-                                'modified_at': modified,
-                                'size': size,
-                                'details': {
-                                    'id': model_id,
-                                    'size': size,
-                                    'modified_at': modified
-                                }
-                            })
-            
-            logger.info(f"Transformed local models data: {models}")
-            return {'models': models}
-        except Exception as e:
-            logger.error(f"Error fetching local models list: {e}")
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching models list: {e}")
             return None
 
     def get_library_models(self) -> Optional[Dict[str, Any]]:

@@ -2,38 +2,79 @@ import os
 import secrets
 import logging
 import requests
+import base64
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, session, send_from_directory
-from flask_wtf.csrf import CSRFProtect
+from flask import Flask, render_template, request, jsonify, session
 from werkzeug.utils import secure_filename
 from config import Config
 from history_manager import HistoryManager
+import json
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Constants
-DEBUG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
-VISION_MODELS = {'llava', 'bakllava'}  # Add other vision models as needed
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(levelname)s    %(name)s:%(filename)s:%(lineno)d %(message)s'))
+logger.addHandler(handler)
 
 # Initialize Flask app
 app = Flask(__name__)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(32))
 
 # Initialize configuration
 Config.init_app(app)
 
 # Initialize CSRF protection
+from flask_wtf.csrf import CSRFProtect
 csrf = CSRFProtect(app)
 
 # Initialize history manager
 history_manager = HistoryManager(app.config['HISTORY_FILE'], app.config['MAX_HISTORY_ENTRIES'])
 
-# Ensure upload directory exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+# Load prompts from JSON file
+try:
+    prompts_path = os.path.join(app.root_path, 'prompts.json')
+    logger.debug(f"Loading prompts from: {prompts_path}")
+    with open(prompts_path) as f:
+        PROMPTS = json.load(f)
+    logger.debug(f"Loaded prompts: {PROMPTS}")
+    logger.debug(f"Rendering template with prompts: {PROMPTS}")
+except Exception as e:
+    logger.error(f"Error loading prompts.json: {e}")
+    PROMPTS = {
+        'vision_models': {
+            'default': 'What do you see in this image?',
+            'suggestions': [
+                'What do you see in this image?',
+                'Describe this image in detail',
+                'What objects are present in this image?',
+                'Analyze the composition of this image',
+                'What is the main subject of this image?'
+            ]
+        },
+        'text_models': {
+            'default': 'How can I help you today?',
+            'suggestions': [
+                'How can I help you today?',
+                'Tell me about yourself',
+                'What can you do?',
+                'Help me with a task',
+                'Give me some information'
+            ]
+        }
+    }
 
-# Debug levels for the UI
-DEBUG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
+# Define vision models
+VISION_MODELS = ['llava', 'bakllava']  # Add more vision models as needed
+
+# Configure upload folder
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+
+# Debug levels
+DEBUG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+
+# Constants
+
 
 @app.route('/debug_level', methods=['POST'])
 def set_debug_level():
@@ -87,89 +128,78 @@ def models():
 @app.route('/')
 def home():
     """Home page route."""
-    try:
-        # Get available models
-        models = get_available_models()
-        model_names = [model['name'] for model in models]
-        
-        # Get selected model from session or use default
-        selected_model = session.get('selected_model')
-        if not selected_model and model_names:
-            selected_model = model_names[0]
-            session['selected_model'] = selected_model
-        
-        # Get current debug level
-        current_debug_level = session.get('debug_level', 'INFO')
-        
-        # Get prompts for model type
-        prompts = app.config.get('PROMPTS', {})
-        if not prompts:
-            prompts = {
-                'vision_models': {'default': '', 'suggestions': []},
-                'text_models': {'default': '', 'suggestions': []}
-            }
-        
-        # Determine model type and get prompts
-        if selected_model:
-            model_type = 'vision_models' if is_vision_model(selected_model) else 'text_models'
-            model_prompts = prompts.get(model_type, {})
-            default_prompt = model_prompts.get('default', '')
-            prompt_suggestions = model_prompts.get('suggestions', [])
-        else:
-            default_prompt = ''
-            prompt_suggestions = []
-        
-        # Render template with data
-        return render_template('index.html',
-                            models=models,
-                            selected_model=selected_model,
-                            default_prompt=default_prompt,
-                            prompt_suggestions=prompt_suggestions,
-                            prompts=prompts,
-                            debug_levels=DEBUG_LEVELS,
-                            current_debug_level=current_debug_level,
-                            history=history_manager.load_history())
-    except Exception as e:
-        app.logger.error(f"Error in home route: {e}")
-        return render_template('index.html', error=str(e))
+    # Get available models
+    models = get_available_models()
+    
+    # Get selected model from session, use first available model as default
+    selected_model = session.get('selected_model')
+    if not selected_model and models:
+        selected_model = models[0]
+        session['selected_model'] = selected_model
+    
+    # Get all prompts
+    all_prompts = []
+    for model_type in ['vision_models', 'text_models']:
+        if model_type in PROMPTS and 'suggestions' in PROMPTS[model_type]:
+            all_prompts.extend(PROMPTS[model_type]['suggestions'])
+    
+    # Get history prompts
+    history = history_manager.load_history()
+    history_limit = int(os.getenv('HISTORY_PROMPT_LIMIT', '3'))
+    app.logger.debug(f"Loaded history: {history}")
+    history_prompts = get_history_prompts(history, None, history_limit)
+    app.logger.debug(f"History prompts: {history_prompts}")
+    
+    # Combine all prompts with history prompts
+    prompt_suggestions = list(dict.fromkeys(all_prompts + history_prompts))  # Remove duplicates while preserving order
+    app.logger.debug(f"All prompts: {all_prompts}")
+    app.logger.debug(f"Combined prompt suggestions: {prompt_suggestions}")
+    
+    # Use text model default prompt as default
+    default_prompt = PROMPTS['text_models']['default']
+    
+    # Render template with data
+    return render_template('index.html',
+                        models=models,
+                        selected_model=selected_model,
+                        debug_levels=DEBUG_LEVELS,
+                        current_debug_level=session.get('debug_level', 'INFO'),
+                        prompt_suggestions=prompt_suggestions,
+                        default_prompt=default_prompt,
+                        prompts=PROMPTS)
 
 @app.route('/select_model', methods=['POST'])
 def select_model():
-    """Handle model selection"""
-    try:
-        model = request.form.get('model')
-        if not model:
-            return jsonify({'status': 'error', 'message': 'No model specified'}), 400
-
-        # Store selected model in session
-        session['selected_model'] = model
-
-        # Determine model type and get prompts
-        model_type = 'vision_models' if is_vision_model(model) else 'text_models'
-        prompts = app.config.get('PROMPTS', {})
-        if not prompts:
-            prompts = {
-                'vision_models': {'default': '', 'suggestions': []},
-                'text_models': {'default': '', 'suggestions': []}
-            }
-
-        model_prompts = prompts.get(model_type, {})
-        default_prompt = model_prompts.get('default', '')
-        prompt_suggestions = model_prompts.get('suggestions', [])
-
-        return jsonify({
-            'status': 'success',
-            'model': model,
-            'default_prompt': default_prompt,
-            'prompt_suggestions': prompt_suggestions
-        })
-
-    except Exception as e:
-        app.logger.error(f"Error in select_model: {e}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+    """Handle model selection."""
+    model = request.form.get('model')
+    if not model:
+        return jsonify({'status': 'error', 'message': 'No model specified'}), 400
+    
+    # Store selected model in session
+    session['selected_model'] = model
+    
+    # Get all prompts
+    all_prompts = []
+    for model_type in ['vision_models', 'text_models']:
+        all_prompts.extend(PROMPTS[model_type]['suggestions'])
+    
+    # Get history prompts
+    history = history_manager.load_history()
+    history_limit = int(os.getenv('HISTORY_PROMPT_LIMIT', '3'))
+    history_prompts = get_history_prompts(history, None, history_limit)
+    
+    # Combine all prompts with history prompts
+    prompt_suggestions = all_prompts + [p for p in history_prompts if p not in all_prompts]
+    
+    # Use text model default prompt
+    default_prompt = PROMPTS['text_models']['default']
+    
+    return jsonify({
+        'status': 'success',
+        'model': model,
+        'default_prompt': default_prompt,
+        'prompt_suggestions': prompt_suggestions
+    })
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
@@ -190,110 +220,119 @@ def analyze():
             model = session.get('selected_model')
             logger.debug(f'Using model from session: {model}')
         
-        is_vision = is_vision_model(model)
-        file_types = get_supported_file_types(model)
-        
-        # Check if file is required but not provided
-        if file_types['required'] and 'file' not in request.files:
-            error_msg = f"This model requires a {file_types['description']} file"
-            logger.warning(error_msg)
-            return render_template('index.html', 
-                                 models=get_available_models(),
-                                 debug_levels=DEBUG_LEVELS,
-                                 current_debug_level=session.get('debug_level', 'INFO'),
-                                 result=error_msg)
-        
         # Handle file if provided
         if 'file' in request.files and request.files['file'].filename:
             file = request.files['file']
             filename = secure_filename(file.filename)
-            file_ext = filename.split('.')[-1].lower()
-            
-            # Validate file extension
-            if file_ext not in file_types['extensions']:
-                error_msg = f"Invalid file type. Supported types: {file_types['description']}"
-                logger.warning(error_msg)
-                return render_template('index.html', 
-                                     models=get_available_models(),
-                                     debug_levels=DEBUG_LEVELS,
-                                     current_debug_level=session.get('debug_level', 'INFO'),
-                                     result=error_msg)
             
             # Save and process file
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
             
             try:
-                if is_vision:
-                    # Use Ollama to analyze the image
-                    response = ollama.chat(
-                        model=model,
-                        messages=[{
+                # Read file as base64
+                with open(filepath, 'rb') as f:
+                    file_data = f.read()
+                file_base64 = base64.b64encode(file_data).decode('utf-8')
+                
+                # Use Ollama API with image
+                response = requests.post(
+                    f"{Config.OLLAMA_HOST}/api/chat",
+                    json={
+                        "model": model,
+                        "messages": [{
                             "role": "user",
-                            "content": f"Prompt: {prompt}\nPlease analyze this image and answer the prompt.",
-                            "images": [filepath]
-                        }],
-                    )
-                else:
-                    # Read and process text-based file
-                    try:
-                        with open(filepath, 'r') as f:
-                            file_content = f.read()
-                    except UnicodeDecodeError:
-                        error_msg = "Could not read file. Make sure it's a valid text file."
-                        logger.error(error_msg)
-                        return render_template('index.html', 
-                                             models=get_available_models(),
-                                             debug_levels=DEBUG_LEVELS,
-                                             current_debug_level=session.get('debug_level', 'INFO'),
-                                             result=error_msg)
-                    
-                    # Use Ollama to analyze the document
-                    response = ollama.chat(
-                        model=model,
-                        messages=[{
-                            "role": "user",
-                            "content": f"Here is the document content:\n\n{file_content}\n\nPrompt: {prompt}"
-                        }],
-                    )
+                            "content": prompt,
+                            "images": [file_base64]
+                        }]
+                    }
+                )
             finally:
                 # Clean up the uploaded file
                 if os.path.exists(filepath):
                     os.remove(filepath)
         else:
-            # No file provided, just process the prompt
-            if file_types['required']:
-                error_msg = f"This model requires a {file_types['description']} file"
-                logger.warning(error_msg)
-                return render_template('index.html', 
-                                     models=get_available_models(),
-                                     debug_levels=DEBUG_LEVELS,
-                                     current_debug_level=session.get('debug_level', 'INFO'),
-                                     result=error_msg)
-            
-            response = ollama.chat(
-                model=model,
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }],
+            # Use Ollama API without image
+            response = requests.post(
+                f"{Config.OLLAMA_HOST}/api/chat",
+                json={
+                    "model": model,
+                    "messages": [{
+                        "role": "user",
+                        "content": prompt
+                    }]
+                }
             )
         
-        result = response['message']['content']
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
+        # Check response status
+        if response.status_code != 200:
+            error_msg = f"Error from Ollama API: {response.text}"
+            logger.error(error_msg)
+            return render_template('index.html', 
+                                 models=get_available_models(),
+                                 debug_levels=DEBUG_LEVELS,
+                                 current_debug_level=session.get('debug_level', 'INFO'),
+                                 result=error_msg)
         
-        # Format response with timing
-        result_with_timing = f"Response (took {duration:.2f} seconds):\n\n{result}"
+        # Parse response
+        try:
+            lines = response.text.strip().split('\n')
+            full_response = ""
+            
+            # Process each line of the streaming response
+            for line in lines:
+                try:
+                    response_json = json.loads(line)
+                    if 'message' in response_json:
+                        # Chat response
+                        content = response_json['message']['content']
+                        full_response += content
+                    elif 'response' in response_json:
+                        # Generate response
+                        content = response_json['response']
+                        full_response += content
+                except json.JSONDecodeError:
+                    # Skip invalid JSON lines
+                    continue
+            
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            # Format response with timing
+            result_with_timing = f"Response (took {duration:.2f} seconds):\n\n{full_response}"
+            
+            # Add to persistent history
+            history = history_manager.add_entry(
+                model=model,
+                prompt=prompt,
+                result=result_with_timing,
+                duration=duration,
+                success=True
+            )
+        except Exception as e:
+            error_msg = f"Error parsing response: {str(e)}"
+            logger.error(error_msg)
+            logger.error(f"Response text: {response.text}")
+            return render_template('index.html', 
+                                models=get_available_models(),
+                                debug_levels=DEBUG_LEVELS,
+                                current_debug_level=session.get('debug_level', 'INFO'),
+                                result=error_msg)
         
-        # Add to persistent history
-        history = history_manager.add_entry(
-            model=model,
-            prompt=prompt,
-            result=result_with_timing,
-            duration=duration,
-            success=True
-        )
+        # Get prompt suggestions
+        history_limit = int(os.getenv('HISTORY_PROMPT_LIMIT', '3'))
+        history_prompts = get_history_prompts(history, None, history_limit)
+        
+        prompt_suggestions = [
+            'What do you see in this image?',
+            'Describe this image in detail',
+            'What objects are present in this image?',
+            'Analyze the composition of this image',
+            'What is the main subject of this image?'
+        ]
+        
+        # Combine suggestions with history prompts
+        prompt_suggestions = prompt_suggestions + [p for p in history_prompts if p not in prompt_suggestions]
         
         logger.info('Analysis completed successfully')
         return render_template('index.html', 
@@ -302,20 +341,19 @@ def analyze():
                              current_debug_level=session.get('debug_level', 'INFO'),
                              selected_model=model,
                              result=result_with_timing,
-                             history=history)
+                             history=history,
+                             prompt_suggestions=prompt_suggestions)
     
     except Exception as e:
-        logger.exception('Error during analysis')
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-        error_with_timing = f"Error (after {duration:.2f} seconds): {str(e)}"
+        logger.exception('Error in analyze')
+        error_with_timing = f"Error (after {(datetime.now() - start_time).total_seconds():.2f} seconds): {str(e)}"
         
-        # Add error to persistent history
+        # Add to persistent history
         history = history_manager.add_entry(
             model=model,
             prompt=prompt,
             result=error_with_timing,
-            duration=duration,
+            duration=(datetime.now() - start_time).total_seconds(),
             success=False
         )
         
@@ -337,9 +375,43 @@ def clear_history():
         logger.exception('Error clearing history')
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+def get_history_prompts(history, model_type, limit=3):
+    """Get unique prompts from history for a specific model type."""
+    app.logger.debug(f"Getting history prompts with model_type={model_type}, limit={limit}")
+    if not history:
+        app.logger.debug("No history found")
+        return []
+        
+    prompts = []
+    seen = set()
+    
+    for entry in history:
+        prompt = entry.get('prompt')
+        app.logger.debug(f"Processing entry: {entry}")
+        if not prompt or prompt in seen:
+            app.logger.debug(f"Skipping prompt: {prompt} (empty or duplicate)")
+            continue
+            
+        # Check if model type matches
+        is_vision = is_vision_model(entry.get('model', ''))
+        current_type = 'vision' if is_vision else 'text'
+        app.logger.debug(f"Entry model type: {current_type}")
+        
+        if model_type is None or current_type == model_type:
+            app.logger.debug(f"Adding prompt: {prompt}")
+            prompts.append(prompt)
+            seen.add(prompt)
+            
+            if len(prompts) >= limit:
+                app.logger.debug(f"Reached limit of {limit} prompts")
+                break
+    
+    app.logger.debug(f"Returning prompts: {prompts}")
+    return prompts
+
 def is_vision_model(model_name):
     """Check if a model is a vision model."""
-    vision_models = ['llava', 'bakllava']  # Add more vision models as needed
+    vision_models = VISION_MODELS  # Add more vision models as needed
     return any(vm in model_name.lower() for vm in vision_models)
 
 def get_supported_file_types(model_name):
@@ -365,7 +437,7 @@ def get_available_models():
         response = requests.get(f"{Config.OLLAMA_HOST}/api/tags")
         if response.status_code == 200:
             models = response.json().get('models', [])
-            return models if models else []
+            return [model['name'] for model in models] if models else []
         return []
     except Exception as e:
         app.logger.error(f"Error getting models: {e}")
@@ -373,4 +445,5 @@ def get_available_models():
 
 if __name__ == '__main__':
     logger.setLevel(logging.INFO)  # Set default level to INFO
-    app.run(debug=True, port=5002)
+    port = int(os.getenv('FLASK_PORT', 5002))  # Use FLASK_PORT from .env, default to 5002 if not set
+    app.run(debug=True, port=port)

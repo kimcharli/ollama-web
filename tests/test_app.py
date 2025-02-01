@@ -1,15 +1,33 @@
 import os
-import pytest
 import json
-from flask import session
+import io
+import pytest
+from unittest.mock import patch, MagicMock
 from app import app, DEBUG_LEVELS
 
 @pytest.fixture
 def client():
+    """Create a test client for the app."""
     app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
+    app.config['WTF_CSRF_ENABLED'] = False  # Disable CSRF for testing
     with app.test_client() as client:
         yield client
+
+@pytest.fixture
+def mock_requests():
+    """Mock requests module for testing."""
+    with patch('requests.post') as mock_post:
+        yield mock_post
+
+@pytest.fixture
+def mock_history():
+    """Mock history manager for testing."""
+    history = []
+    mock_manager = MagicMock()
+    mock_manager.add_entry.side_effect = lambda **kwargs: history.append(kwargs) or history
+    mock_manager.load_history.return_value = history
+    with patch('app.history_manager', mock_manager):
+        yield mock_manager, history
 
 def test_debug_level_static():
     """Test debug level constants and validation"""
@@ -17,159 +35,200 @@ def test_debug_level_static():
     assert isinstance(DEBUG_LEVELS, list), "DEBUG_LEVELS should be a list"
     assert len(DEBUG_LEVELS) > 0, "DEBUG_LEVELS should not be empty"
     assert all(isinstance(level, str) for level in DEBUG_LEVELS), "All debug levels should be strings"
-    assert all(level in ['DEBUG', 'INFO', 'WARNING', 'ERROR'] for level in DEBUG_LEVELS), "Invalid debug levels"
+    assert all(level in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] for level in DEBUG_LEVELS), "Invalid debug levels"
 
-def test_debug_level_route(client):
-    """Test debug level route functionality"""
-    # Test setting valid debug level
-    for level in DEBUG_LEVELS:
-        response = client.post('/debug_level', data={'level': level})
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['status'] == 'success'
-        assert data['current_debug_level'] == level
-
-    # Test invalid debug level
-    response = client.post('/debug_level', data={'level': 'INVALID'})
-    assert response.status_code == 400
-    data = json.loads(response.data)
-    assert data['status'] == 'error'
-
-    # Test missing debug level
-    response = client.post('/debug_level', data={})
-    assert response.status_code == 200  # Should use default 'INFO'
-    data = json.loads(response.data)
-    assert data['current_debug_level'] == 'INFO'
-
-def test_debug_level_session(client):
-    """Test debug level session handling"""
-    # Set debug level
-    client.post('/debug_level', data={'level': 'DEBUG'})
+def test_analyze_with_text_prompt(client, mock_requests, mock_history):
+    """Test analyze endpoint with a text prompt"""
+    mock_manager, history = mock_history
+    model = os.getenv('TEST_MODEL', 'tinyllama')
+    prompt = os.getenv('TEST_PROMPT', 'What is the capital of France?')
     
-    # Check if debug level persists
-    response = client.get('/')
-    assert response.status_code == 200
-    assert b'Debug Level: DEBUG' in response.data
-
-def test_home_page_debug_dropdown(client):
-    """Test debug level dropdown in home page"""
+    # Mock Ollama API response
+    mock_response = {
+        'response': 'The capital of France is Paris.',
+        'model': model,
+        'created_at': '2024-01-31T18:33:07-05:00',
+        'done': True
+    }
+    
+    # Configure mock
+    mock_requests.return_value.status_code = 200
+    mock_requests.return_value.json.return_value = mock_response
+    
+    # Make sure model is available
     response = client.get('/')
     assert response.status_code == 200
     
-    # Check for debug button
-    assert b'id="debugButton"' in response.data
-    assert b'Debug Level:' in response.data
-    
-    # Check for debug dropdown
-    assert b'id="debugDropdown"' in response.data
-    
-    # Check for all debug levels in dropdown
-    for level in DEBUG_LEVELS:
-        assert level.encode() in response.data
-
-def test_debug_level_javascript():
-    """Test debug level JavaScript functions"""
-    # Read the template file
-    template_path = os.path.join(app.root_path, 'templates', 'index.html')
-    with open(template_path, 'r') as f:
-        template_content = f.read()
-    
-    # Check for required JavaScript functions
-    required_functions = [
-        'toggleDebugDropdown',
-        'setDebugLevel',
-    ]
-    for func in required_functions:
-        assert f'function {func}' in template_content, f"Missing JavaScript function: {func}"
-    
-    # Check for event listeners
-    assert 'addEventListener' in template_content
-    assert "document.querySelectorAll('[data-debug-level]')" in template_content
-
-def test_online_debug_level(client):
-    """Test debug level functionality with live server"""
-    # Set debug level
-    response = client.post('/debug_level', data={'level': 'DEBUG'})
-    assert response.status_code == 200
-    
-    # Make a request that should generate debug logs
-    client.get('/')
-    
-    # Set different levels and verify logging behavior
-    for level in DEBUG_LEVELS:
-        response = client.post('/debug_level', data={'level': level})
-        assert response.status_code == 200
-        
-        # Make a request that generates logs
-        client.get('/')
-        
-        # TODO: Add log file checks here once logging to file is implemented
-
-def test_prompt_suggestions_static():
-    """Test prompt suggestions structure"""
-    # Read the template file
-    template_path = os.path.join(app.root_path, 'templates', 'index.html')
-    with open(template_path, 'r') as f:
-        template_content = f.read()
-    
-    # Check for prompt dropdown elements
-    assert 'id="promptDropdownButton"' in template_content
-    assert 'id="promptDropdown"' in template_content
-    
-    # Check for prompt JavaScript functions
-    required_functions = [
-        'toggleDropdown',
-        'updatePromptDropdown',
-        'setPrompt',
-    ]
-    for func in required_functions:
-        assert f'function {func}' in template_content, f"Missing JavaScript function: {func}"
-
-def test_prompt_suggestions_route(client):
-    """Test prompt suggestions functionality"""
-    # Get home page
-    response = client.get('/')
-    assert response.status_code == 200
-    
-    # Check for prompt suggestions in response
-    assert b'promptSuggestions' in response.data
-    assert b'defaultPrompt' in response.data
-    
-    # Test model selection with prompt update
-    response = client.post('/select_model', data={'model': 'llama2'})
-    assert response.status_code == 200
-    data = json.loads(response.data)
-    assert 'prompt_suggestions' in data
-    assert 'default_prompt' in data
-
-def test_model_type_detection():
-    """Test model type detection for prompts"""
-    from app import VISION_MODELS, is_vision_model
-    
-    # Test vision models
-    for model in VISION_MODELS:
-        assert is_vision_model(model), f"{model} should be detected as vision model"
-    
-    # Test non-vision models
-    assert not is_vision_model('llama2'), "llama2 should not be detected as vision model"
-    assert not is_vision_model('mistral'), "mistral should not be detected as vision model"
-
-def test_error_handling(client):
-    """Test error handling for debug and prompt functionality"""
-    # Test invalid debug level format
-    response = client.post('/debug_level', data={'level': '123'})
-    assert response.status_code == 400
-    
-    # Test missing model in selection
-    response = client.post('/select_model', data={})
-    assert response.status_code == 400
-    
-    # Test invalid model name
-    response = client.post('/select_model', data={'model': 'nonexistent'})
-    assert response.status_code == 200  # Should handle gracefully
-    
-    # Test prompt suggestions with invalid model type
+    # Set the model in session
     with client.session_transaction() as session:
-        client.post('/select_model', data={'model': 'invalid_model'})
-        response = client.get('/')
-        assert response.status_code == 200  # Should handle gracefully
+        session['selected_model'] = model
+    
+    # Send analyze request
+    response = client.post('/analyze', data={
+        'model': model,
+        'prompt': prompt
+    })
+    assert response.status_code == 200
+    
+    # Check that we got a response
+    html = response.data.decode()
+    assert 'Response (took' in html
+    assert 'Error from Ollama API' not in html  # No API error
+    assert 'Error (after' not in html  # No general error
+    assert mock_response['response'] in html  # Response should be in the output
+    
+    # Check that history was updated
+    assert len(history) == 1
+    latest = history[0]
+    assert latest['model'] == model
+    assert latest['prompt'] == prompt
+    assert latest['success'] is True
+    assert 'duration' in latest
+    assert isinstance(latest['duration'], (int, float))
+    assert latest['duration'] > 0
+
+def test_analyze_with_vision_model(client, mock_requests, mock_history):
+    """Test analyze endpoint with a vision model"""
+    mock_manager, history = mock_history
+    model = 'llava'  # Vision model
+    prompt = 'What do you see in this image?'
+    
+    # Create a test image
+    image_data = b'fake image data'
+    image = io.BytesIO(image_data)
+    image.filename = 'test.jpg'
+    
+    # Mock Ollama API response
+    mock_response = {
+        'message': {
+            'role': 'assistant',
+            'content': 'I see a test image.',
+        },
+        'model': model,
+        'created_at': '2024-01-31T18:33:07-05:00',
+        'done': True
+    }
+    
+    # Configure mock
+    mock_requests.return_value.status_code = 200
+    mock_requests.return_value.json.return_value = mock_response
+    
+    # Make sure model is available
+    response = client.get('/')
+    assert response.status_code == 200
+    
+    # Set the model in session
+    with client.session_transaction() as session:
+        session['selected_model'] = model
+    
+    # Send analyze request with image
+    response = client.post('/analyze', data={
+        'model': model,
+        'prompt': prompt,
+        'file': (image, 'test.jpg')
+    })
+    assert response.status_code == 200
+    
+    # Check that we got a response
+    html = response.data.decode()
+    assert 'Response (took' in html
+    assert 'Error from Ollama API' not in html  # No API error
+    assert 'Error (after' not in html  # No general error
+    assert mock_response['message']['content'] in html  # Response should be in the output
+    
+    # Check that history was updated
+    assert len(history) == 1
+    latest = history[0]
+    assert latest['model'] == model
+    assert latest['prompt'] == prompt
+    assert latest['success'] is True
+    assert 'duration' in latest
+    assert isinstance(latest['duration'], (int, float))
+    assert latest['duration'] > 0
+    
+    # Verify API call
+    mock_requests.assert_called_once()
+    call_args = mock_requests.call_args
+    assert call_args is not None
+    
+    # Check URL
+    url = call_args[0][0]
+    assert url.endswith('/api/chat')  # Vision models use chat endpoint
+    
+    # Check request data
+    json_data = call_args[1]['json']
+    assert json_data['model'] == model
+    assert len(json_data['messages']) == 1
+    assert json_data['messages'][0]['role'] == 'user'
+    assert 'images' in json_data['messages'][0]
+    assert len(json_data['messages'][0]['images']) == 1  # Should have one base64 image
+
+def test_suggested_prompts_after_analyze(client, mock_requests, mock_history):
+    """Test that suggested prompts are maintained after analysis"""
+    mock_manager, history = mock_history
+    model = 'llava'  # Use a vision model to test suggestions
+    prompt = 'What do you see in this image?'
+    
+    # Mock Ollama API response
+    mock_response = {
+        'message': {
+            'role': 'assistant',
+            'content': 'I see a test image.',
+        },
+        'model': model,
+        'created_at': '2024-01-31T18:33:07-05:00',
+        'done': True
+    }
+    
+    # Configure mock
+    mock_requests.return_value.status_code = 200
+    mock_requests.return_value.json.return_value = mock_response
+    
+    # Make sure model is available and get initial suggestions
+    response = client.get('/')
+    assert response.status_code == 200
+    html = response.data.decode()
+    
+    # Verify initial suggestions are present
+    assert 'What do you see in this image?' in html
+    assert 'Describe this image in detail' in html
+    
+    # Set the model in session
+    with client.session_transaction() as session:
+        session['selected_model'] = model
+    
+    # Create a test image
+    image_data = b'fake image data'
+    image = io.BytesIO(image_data)
+    image.filename = 'test.jpg'
+    
+    # Send analyze request with image
+    response = client.post('/analyze', data={
+        'model': model,
+        'prompt': prompt,
+        'file': (image, 'test.jpg')
+    })
+    assert response.status_code == 200
+    
+    # Check suggestions in analyze response
+    html = response.data.decode()
+    assert 'What do you see in this image?' in html
+    assert 'Describe this image in detail' in html
+    assert 'What objects are present in this image?' in html
+    assert 'Analyze the composition of this image' in html
+    assert 'What is the main subject of this image?' in html
+    
+    # Get the homepage again
+    response = client.get('/')
+    assert response.status_code == 200
+    html = response.data.decode()
+    
+    # Verify suggestions are still present
+    assert 'What do you see in this image?' in html
+    assert 'Describe this image in detail' in html
+    assert 'What objects are present in this image?' in html
+    assert 'Analyze the composition of this image' in html
+    assert 'What is the main subject of this image?' in html
+    
+    # Also check that our used prompt is in history prompts
+    assert prompt in html  # The used prompt should appear in history suggestions

@@ -17,6 +17,7 @@ dependencies = [
     "pytest-cov>=6.0.0",
     "pytest-html>=4.1.1",
     "pytest-xdist>=3.6.1",
+    "selenium>=4.17.2",
 ]
 requires-python = ">=3.10"
 
@@ -26,6 +27,7 @@ test = [
     "pytest-cov>=4.1.0",
     "pytest-html>=4.1.1",
     "pytest-xdist>=3.3.1",
+    "selenium>=4.17.2",
 ]
 
 [build-system]

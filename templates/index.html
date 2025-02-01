@@ -7,14 +7,20 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         // Global variables
-        let defaultPrompt = "{{ default_prompt | safe }}";
-        let promptSuggestions = {{ prompt_suggestions | tojson | safe }};
-        let prompts = {{ prompts | tojson | safe }};
+        let defaultPrompt = "{{ default_prompt | default('') | safe }}";
+        let promptSuggestions = {{ prompt_suggestions | default([]) | tojson | safe }};
+        let prompts = {{ prompts | default({'vision_models': {'default': '', 'suggestions': []}, 'text_models': {'default': '', 'suggestions': []}}) | tojson | safe }};
         let isDropdownOpen = false;
+
+        console.log('Initial defaultPrompt:', defaultPrompt);
+        console.log('Initial promptSuggestions:', promptSuggestions);
+        console.log('Initial prompts:', prompts);
 
         // Model selection handling
         function handleModelChange(event) {
             const model = event.target.value;
+            console.log('Model changed to:', model);
+            
             const formData = new FormData();
             formData.append('model', model);
             formData.append('csrf_token', '{{ csrf_token() }}');
@@ -25,13 +31,17 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Select model response:', data);
                 if (data.status === 'success') {
                     defaultPrompt = data.default_prompt;
                     promptSuggestions = data.prompt_suggestions;
                     
+                    console.log('Updated defaultPrompt:', defaultPrompt);
+                    console.log('Updated promptSuggestions:', promptSuggestions);
+                    
                     // Update prompt input
                     const promptInput = document.getElementById('prompt');
-                    if (!promptInput.value) {
+                    if (!promptInput.value || promptInput.value === defaultPrompt) {
                         promptInput.value = defaultPrompt;
                     }
                     
@@ -47,77 +57,48 @@
             .catch(error => console.error('Error:', error));
         }
 
-        // Debug level handling
-        function toggleDebugDropdown() {
-            const dropdown = document.getElementById('debugDropdown');
-            if (dropdown) {
-                dropdown.classList.toggle('hidden');
-            }
-        }
-
-        // Close debug dropdown when clicking outside
-        window.addEventListener('click', function(event) {
-            const dropdown = document.getElementById('debugDropdown');
-            const button = document.getElementById('debugButton');
-            
-            if (!dropdown || !button) return;
-            
-            if (!button.contains(event.target) && !dropdown.contains(event.target)) {
-                dropdown.classList.add('hidden');
-            }
-        });
-
-        // Update debug level
-        function setDebugLevel(level) {
-            const formData = new FormData();
-            formData.append('level', level);
-            formData.append('csrf_token', '{{ csrf_token() }}');
-            
-            fetch('/debug_level', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    // Update button text
-                    const button = document.getElementById('debugButton');
-                    if (button) {
-                        button.textContent = 'Debug Level: ' + level;
-                    }
-                    
-                    // Hide dropdown
-                    const dropdown = document.getElementById('debugDropdown');
-                    if (dropdown) {
-                        dropdown.classList.add('hidden');
-                    }
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        }
-
         // Prompt dropdown handling
         function toggleDropdown(event) {
             event.preventDefault();
             event.stopPropagation();
-            isDropdownOpen = !isDropdownOpen;
             
             const dropdown = document.getElementById('promptDropdown');
             const button = document.getElementById('promptDropdownButton');
             
-            if (isDropdownOpen) {
-                dropdown.classList.remove('hidden');
-                button.setAttribute('aria-expanded', 'true');
-                updatePromptDropdown();
-            } else {
+            if (dropdown && button) {
+                isDropdownOpen = !isDropdownOpen;
+                console.log('Toggling dropdown:', isDropdownOpen);
+                
+                if (isDropdownOpen) {
+                    dropdown.classList.remove('hidden');
+                    button.setAttribute('aria-expanded', 'true');
+                    updatePromptDropdown();
+                } else {
+                    dropdown.classList.add('hidden');
+                    button.setAttribute('aria-expanded', 'false');
+                }
+            }
+        }
+
+        // Close dropdown when clicking outside
+        window.addEventListener('click', function(event) {
+            const dropdown = document.getElementById('promptDropdown');
+            const button = document.getElementById('promptDropdownButton');
+            
+            if (!dropdown || !button) return;
+            
+            if (!button.contains(event.target) && !dropdown.contains(event.target)) {
+                isDropdownOpen = false;
                 dropdown.classList.add('hidden');
                 button.setAttribute('aria-expanded', 'false');
             }
-        }
+        });
 
         function updatePromptDropdown() {
             const dropdown = document.getElementById('promptDropdown');
             if (!dropdown) return;
+            
+            console.log('Updating dropdown with suggestions:', promptSuggestions);
             
             // Clear existing items
             dropdown.innerHTML = '';
@@ -130,87 +111,81 @@
                 return;
             }
             
-            // Add new items
-            promptSuggestions.forEach(prompt => {
+            // Add suggestions to dropdown
+            promptSuggestions.forEach(suggestion => {
                 const item = document.createElement('button');
                 item.type = 'button';
-                item.className = 'w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none';
-                item.textContent = prompt;
-                item.title = prompt;  // For tooltip
-                item.onclick = () => {
-                    setPrompt(prompt);
-                    toggleDropdown(event);
+                item.className = 'w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500';
+                item.textContent = suggestion;
+                item.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPrompt(suggestion);
                 };
                 dropdown.appendChild(item);
             });
         }
 
         function setPrompt(prompt) {
+            console.log('Setting prompt to:', prompt);
             const promptInput = document.getElementById('prompt');
             if (promptInput) {
                 promptInput.value = prompt;
                 promptInput.focus();
             }
+            isDropdownOpen = false;
+            const dropdown = document.getElementById('promptDropdown');
+            const button = document.getElementById('promptDropdownButton');
+            if (dropdown) {
+                dropdown.classList.add('hidden');
+            }
+            if (button) {
+                button.setAttribute('aria-expanded', 'false');
+            }
         }
 
+        // Update UI based on model type
         function updateModelType() {
             const modelSelect = document.getElementById('model');
             const selectedModel = modelSelect.value;
-            const isVision = selectedModel.toLowerCase().includes('llava');
             
-            // Show/hide file upload
-            const fileUpload = document.getElementById('fileUpload');
-            if (fileUpload) {
-                fileUpload.style.display = isVision ? 'block' : 'none';
+            console.log('Selected model:', selectedModel);
+            
+            // Show file upload section for all models
+            const fileSection = document.getElementById('fileSection');
+            const fileRequired = document.getElementById('fileRequired');
+            const fileDescription = document.getElementById('fileDescription');
+            
+            if (fileSection) {
+                fileSection.style.display = 'block';
+                fileRequired.textContent = '(Optional)';
+                fileDescription.textContent = 'Upload an image to analyze';
             }
         }
 
-        // Event listeners
+        // Initialize dropdown and event handlers on page load
         document.addEventListener('DOMContentLoaded', function() {
-            // Model change handler
+            console.log('DOMContentLoaded - Initializing dropdown');
+            
+            // Initialize dropdown
+            updatePromptDropdown();
+            
+            // Add model change handler
             const modelSelect = document.getElementById('model');
             if (modelSelect) {
+                console.log('Adding model change handler');
                 modelSelect.addEventListener('change', handleModelChange);
             }
-            
-            // Add click handlers for debug level items
-            document.querySelectorAll('[data-debug-level]').forEach(item => {
-                item.addEventListener('click', function() {
-                    setDebugLevel(this.dataset.debugLevel);
-                });
-            });
             
             // Add click handler for prompt dropdown button
             const promptDropdownButton = document.getElementById('promptDropdownButton');
             if (promptDropdownButton) {
+                console.log('Adding prompt dropdown button handler');
                 promptDropdownButton.addEventListener('click', toggleDropdown);
             }
             
-            // Close dropdowns when clicking outside
-            document.addEventListener('click', function(event) {
-                const promptDropdown = document.getElementById('promptDropdown');
-                const debugDropdown = document.getElementById('debugDropdown');
-                const promptButton = document.getElementById('promptDropdownButton');
-                const debugButton = document.getElementById('debugButton');
-                
-                if (!event.target.closest('#promptDropdownButton') && promptDropdown) {
-                    promptDropdown.classList.add('hidden');
-                    if (promptButton) {
-                        promptButton.setAttribute('aria-expanded', 'false');
-                    }
-                }
-                
-                if (!event.target.closest('#debugButton') && debugDropdown) {
-                    debugDropdown.classList.add('hidden');
-                    if (debugButton) {
-                        debugButton.setAttribute('aria-expanded', 'false');
-                    }
-                }
-            });
-            
-            // Initialize model type
+            // Update model type
             updateModelType();
-            updatePromptDropdown();
         });
     </script>
 </head>
@@ -290,7 +265,7 @@
                                                                 <input id="file" name="file" type="file" class="sr-only">
                                                             </label>
                                                         </div>
-                                                        <p id="fileDescription" class="text-xs text-gray-500">Supported file types will be shown based on model</p>
+                                                        <p id="fileDescription" class="text-xs text-gray-500">Upload an image to analyze</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -307,13 +282,18 @@
                                                 <div class="relative inline-block text-left mt-2">
                                                     <button type="button" id="promptDropdownButton"
                                                         class="inline-flex justify-center w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                                        aria-haspopup="true" aria-expanded="false">
+                                                        aria-expanded="false"
+                                                        aria-haspopup="true">
                                                         Suggested Prompts
                                                         <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                                             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
                                                         </svg>
                                                     </button>
-                                                    <div id="promptDropdown" class="hidden origin-top-right absolute right-0 mt-2 w-96 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 z-10">
+                                                    <div id="promptDropdown"
+                                                        class="hidden origin-top-right absolute right-0 mt-2 w-96 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
+                                                        role="menu"
+                                                        aria-orientation="vertical"
+                                                        aria-labelledby="promptDropdownButton">
                                                     </div>
                                                 </div>
                                             </div>
@@ -379,7 +359,7 @@
                                                 </div>
                                                 <div id="history-content-{{ loop.index }}" class="text-sm text-gray-600 whitespace-pre-wrap h-32 overflow-hidden transition-all duration-200">{{ item.result }}</div>
                                                 <div class="flex justify-between items-center mt-2">
-                                                    <div class="text-xs text-gray-500">Duration: {{ "%.2f"|format(item.duration) }}s</div>
+                                                    <div class="text-xs text-gray-500">Duration: {{ "%.2f"|format(item.duration|default(0.0)) }}s</div>
                                                     <button 
                                                         id="history-toggle-{{ loop.index }}"
                                                         onclick="toggleHistoryItem('{{ loop.index }}')"

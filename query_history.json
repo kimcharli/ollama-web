@@ -6,5 +6,189 @@
     "result": "Response (took 37.39 seconds):\n\nBGP (Border Gateway Protocol) communities are a mechanism for attaching metadata to BGP routes, allowing network operators to apply specific policies based on these values. The `0:14` notation in a BGP community is a standard format used to represent such communities as pairs of two 16-bit integers.\n\n### Official Documentation:\n\n1. **IETF RFCs**:\n   - **RFC 1997 (\"BGP Communities Attribute\")**: This document originally defined the BGP Community attribute, describing how communities are structured and used in BGP updates.\n   - **RFC 3065 (\"Use of BGP Extended Community Attributes for Traffic Engineering (TE)\")** and **RFC 4360 (\"Extending BGP-4 to Support Multiple Addresses per Neighbor\")**: These RFCs extend the use of community attributes, providing additional context on their application.\n\n2. **IETF Mailing Lists and Documents**:\n   - Discussions and documents from IETF mailing lists like `bier@ietf.org` or `bgp-specext@ietf.org` can provide insights into how communities are used in practice.\n   - The BGP Specification Extensions Working Group often discusses community-related features and their implementations.\n\n3. **Vendor Documentation**:\n   - Major network equipment vendors (Cisco, Juniper, etc.) often have documentation explaining how they implement BGP communities, including specific interpretations or extensions like `0:14`.\n\n### Understanding `0:14`:\n\n- **Format**: The notation `0:14` represents a community value with the first part (`0`) and second part (`14`). Both parts are 16-bit numbers.\n- **Usage**:\n  - The first number (often called \"local data\" or \"local part\") can be used by an AS for internal policy purposes.\n  - The second number (often called \"global data\" or \"global part\") is intended to have a consistent meaning across different networks.\n\n- **Common Interpretations**:\n  - **Private Use**: In many cases, communities like `0:14` are used internally within an organization and do not have a standardized global meaning.\n  - **Proprietary Uses**: Some network operators or vendors might assign specific meanings to certain community values for internal routing policies.\n\nTo fully understand the use of `0:14` in your environment, you would need to refer to internal documentation or configurations from your network operations team. If it's a proprietary or custom usage, it may not be documented in public RFCs but rather in internal policy documents or configuration guidelines.",
     "duration": 37.389467,
     "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:29:29.807682",
+    "model": "tinyllama:latest",
+    "prompt": "What are the official documents describing bgp community that can explain 0:14?",
+    "result": "Error (after 0.00 seconds): name 'ollama' is not defined",
+    "duration": 0.001974,
+    "success": false
+  },
+  {
+    "timestamp": "2025-01-31T18:32:02.690428",
+    "model": "tinyllama:latest",
+    "prompt": "What are the official documents describing bgp community that can explain 0:14?",
+    "result": "Error (after 2.63 seconds): Extra data: line 2 column 1 (char 130)",
+    "duration": 2.632057,
+    "success": false
+  },
+  {
+    "timestamp": "2025-01-31T18:33:53.352706",
+    "model": "tinyllama",
+    "prompt": "What is the capital of France?",
+    "result": "Error (after 0.29 seconds): Extra data: line 2 column 1 (char 125)",
+    "duration": 0.286811,
+    "success": false
+  },
+  {
+    "timestamp": "2025-01-31T18:34:41.956576",
+    "model": "tinyllama",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.19 seconds):\n\nThe capital city of France is Paris, located in the \u00cele-de-France region.",
+    "duration": 0.19258,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:35:01.893277",
+    "model": "tinyllama",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.33 seconds):\n\nThe capital of France is Paris, located in the \u00cele-de-France region. The city serves as the administrative and cultural center of the country, housing many important institutions and attractions.",
+    "duration": 0.326005,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:35:22.175159",
+    "model": "tinyllama",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.00 seconds):\n\nThe capital of France is Paris.",
+    "duration": 0.000383,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:35:56.798479",
+    "model": "tinyllama",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.00 seconds):\n\nThe capital of France is Paris.",
+    "duration": 0.00025,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:35:56.851046",
+    "model": "llava",
+    "prompt": "What do you see in this image?",
+    "result": "Response (took 0.00 seconds):\n\nI see a test image.",
+    "duration": 0.001238,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:36:29.822807",
+    "model": "tinyllama",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.00 seconds):\n\nThe capital of France is Paris.",
+    "duration": 0.00023,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:36:29.876817",
+    "model": "llava",
+    "prompt": "What do you see in this image?",
+    "result": "Response (took 0.00 seconds):\n\nI see a test image.",
+    "duration": 0.001218,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:37:29.576213",
+    "model": "tinyllama:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.13 seconds):\n\nThe capital city of France is Paris.",
+    "duration": 0.12811,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:38:54.420274",
+    "model": "tinyllama:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.13 seconds):\n\nThe capital of France is Paris.",
+    "duration": 0.131112,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:39:14.014876",
+    "model": "tinyllama:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.26 seconds):\n\nThe capital of France is Paris. The French government official name for Paris is \"La capitale nationale\", which means \"National capital\".",
+    "duration": 0.258535,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:43:07.142347",
+    "model": "tinyllama:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.23 seconds):\n\nThe capital of France is Paris, located in the Ile-de-France region.",
+    "duration": 0.228072,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T18:45:45.208423",
+    "model": "tinyllama:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.45 seconds):\n\nFrance's capital city is Paris, located in the Seine department (regional division) in the northern part of the country. The name \"Paris\" comes from the French word for \"pier\" and refers to the Seine River running through it.",
+    "duration": 0.446526,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T19:45:15.127516",
+    "model": "llava-llama3:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Error (after 4.80 seconds): Extra data: line 2 column 1 (char 135)",
+    "duration": 4.797248,
+    "success": false
+  },
+  {
+    "timestamp": "2025-01-31T19:45:59.769316",
+    "model": "tinyllama:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Error (after 0.69 seconds): Extra data: line 2 column 1 (char 132)",
+    "duration": 0.693031,
+    "success": false
+  },
+  {
+    "timestamp": "2025-01-31T19:47:39.856708",
+    "model": "tinyllama:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.13 seconds):\n\n",
+    "duration": 0.134987,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T19:47:57.567976",
+    "model": "tinyllama:latest",
+    "prompt": "What are the official documents describing bgp community that can explain 0:14?",
+    "result": "Response (took 2.29 seconds):\n\n",
+    "duration": 2.293032,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T19:49:21.421276",
+    "model": "tinyllama:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.25 seconds):\n\nThe capital of France is Paris, located in the \u00cele-de-France region.",
+    "duration": 0.250598,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T19:49:31.897375",
+    "model": "tinyllama:latest",
+    "prompt": "What are the official documents describing bgp community that can explain 0:14?",
+    "result": "Response (took 1.88 seconds):\n\nHere are the official documents describing BGP community that can help explain the time-step from 0:14 onward:\n\n1. IETF RFC 6539: \"BGP Community: A Standard for Making BGP Communities Meaningful\" by S. Gowans, et al. (2012)\nThis document provides an overview of the BGP community concept and its use in BGP. It explains how communities are created and used to identify and protect critical routes from potential routing attacks and spoofing. This document is widely referenced and provides a good resource for understanding BGP communities.\n\n2. IETF RFC 7854: \"BGP Extended Community\" by P. De Pasquale, et al. (2016)\nThis RFC defines the extended community protocol for use in BGP. It provides a detailed explanation of how communities are used in BGP and what information they contain. This document is widely referenced and provides valuable insights into the BGP community concept.\n\nBoth these documents can help explain the time-step from 0:14 onward, as they provide detailed information about BGP communities and their use in routing.",
+    "duration": 1.881352,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T19:49:52.755031",
+    "model": "gemma2:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 3.68 seconds):\n\nThe capital of France is **Paris**. \ud83c\uddeb\ud83c\uddf7  \n",
+    "duration": 3.676215,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T19:50:15.889026",
+    "model": "gemma2:latest",
+    "prompt": "What are the official documents describing bgp community that can explain 0:14?",
+    "result": "Response (took 13.25 seconds):\n\nThe \"0:14\" BGP community value doesn't have an official definition or documentation within the standard RFCs governing BGP.\n\nHere's why:\n\n* **BGP Communities are Vendor-Specific:** While RFC 4271 defines the concept of BGP communities, it primarily outlines their structure and transmission mechanisms. It leaves the interpretation and usage of specific community values to individual vendors and network operators.\n* **Community Values as Markers:** Communities are often used by operators to convey information about a route or network segment, but these meanings aren't standardized across all implementations. \n\n**Where You Might Find Information:**\n\n1. **Vendor Documentation:** Check the documentation for your specific BGP routers or platforms. They might have internal guidelines or explanations for \"0:14\" within their context.\n2. **Community Databases:** Websites like [https://www.iana.org/assignments/bgp-community](https://www.iana.org/assignments/bgp-community) list registered community values, but they primarily focus on widely recognized and standardized ones. \n3. **Network Operator Forums:** Engage in online communities or forums where network engineers discuss BGP practices. Someone familiar with \"0:14\" might offer insights based on their experience.\n\n**Remember:** Without further context about the specific network or setup using \"0:14,\" it's impossible to determine its precise meaning.\n\n\nLet me know if you have more details about where you encountered \"0:14,\" and I'll try to help further!",
+    "duration": 13.248638,
+    "success": true
   }
 ]

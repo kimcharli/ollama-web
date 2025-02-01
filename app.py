@@ -15,6 +15,7 @@ from prompt_manager import PromptManager
 from config import Config
 from history_manager import HistoryManager
 from fetch_manager import FetchManager
+from model_manager import ModelManager
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -73,6 +74,12 @@ with app.app_context():
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
 
+# Initialize fetch manager
+fetch_manager = FetchManager()
+
+# Initialize model manager
+model_manager = ModelManager()
+
 # Session handling routes
 @app.route('/api/select-model', methods=['POST'])
 def api_select_model():
@@ -113,53 +120,136 @@ def get_current_model():
         logger.error(f"Error getting current model: {e}")
         return jsonify({'error': str(e)}), 500
 
-# Initialize history manager
-history_manager = HistoryManager(Config.HISTORY_FILE, Config.MAX_HISTORY_ENTRIES)
-
-# Initialize fetch manager
-fetch_manager = FetchManager()
-
-def get_available_models():
-    """Get list of available models from Ollama API."""
+@app.route('/api/pull-model', methods=['POST'])
+@csrf.exempt
+def pull_model():
+    """Pull a model from Ollama library."""
     try:
-        response = requests.get(f"{Config.OLLAMA_HOST}/api/tags")
-        if response.status_code == 200:
-            return response.json().get('models', [])
-        logger.error(f"Failed to get models: {response.status_code}")
-        return []
+        data = request.get_json()
+        if not data or 'model' not in data:
+            return jsonify({'error': 'No model specified'}), 400
+
+        model_name = data['model']
+        logger.info(f"Starting model pull for {model_name}")
+
+        def generate():
+            # Send request to Ollama pull endpoint
+            response = requests.post(
+                f"{Config.OLLAMA_HOST}/api/pull",
+                json={"name": model_name},
+                stream=True
+            )
+            
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        progress_data = json.loads(line)
+                        # Calculate progress percentage
+                        if 'total' in progress_data and progress_data['total'] > 0:
+                            completed = progress_data.get('completed', 0)
+                            total = progress_data['total']
+                            progress = int((completed / total) * 100)
+                            progress_data['progress'] = progress
+                            
+                            # Convert bytes to MB for display
+                            progress_data['completed_mb'] = round(completed / 1024 / 1024, 1)
+                            progress_data['total_mb'] = round(total / 1024 / 1024, 1)
+                        
+                        # Send progress update
+                        yield f"data: {json.dumps(progress_data)}\n\n"
+                        
+                        if progress_data.get('status') == 'success':
+                            logger.info(f"Successfully pulled model {model_name}")
+                            yield f"data: {json.dumps({'status': 'done', 'progress': 100})}\n\n"
+                            break
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Error parsing progress data: {e}")
+                        continue
+
+        return Response(generate(), mimetype='text/event-stream')
+    except Exception as e:
+        logger.error(f"Error in pull_model: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ollama-status')
+def check_ollama_status():
+    """Check if Ollama is running."""
+    try:
+        response = requests.get(f"{Config.OLLAMA_HOST}/api/tags", timeout=2)
+        return jsonify({'running': response.ok})
+    except Exception as e:
+        logger.error(f"Error checking Ollama status: {e}")
+        return jsonify({'running': False})
+
+@app.route('/api/models')
+def get_models_api():
+    """Get list of available models."""
+    try:
+        models = get_available_models()
+        return jsonify({'models': models})
     except Exception as e:
         logger.error(f"Error getting models: {e}")
-        return []
+        return jsonify({'error': str(e)}), 500
 
-def load_prompts():
-    """Load prompts from JSON file."""
+@app.route('/api/library-models')
+def get_library_models():
+    """Get list of available models from Ollama library."""
     try:
-        with open('prompts.json', 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading prompts.json: {e}")
-        return {
-            'vision_models': {
-                'default': 'What do you see in this image?',
-                'suggestions': [
-                    'What do you see in this image?',
-                    'Describe this image in detail',
-                    'What objects are present in this image?',
-                    'Analyze the composition of this image',
-                    'What is the main subject of this image?'
-                ]
+        # Common models that are available in Ollama
+        common_models = [
+            {
+                'name': 'llama2',
+                'description': 'Meta\'s Llama 2 LLM, fine-tuned for chat'
             },
-            'text_models': {
-                'default': 'How can I help you today?',
-                'suggestions': [
-                    'How can I help you today?',
-                    'Tell me about yourself',
-                    'What can you do?',
-                    'Help me with a task',
-                    'Give me some information'
-                ]
+            {
+                'name': 'llama2:13b',
+                'description': 'Meta\'s Llama 2 13B parameter variant'
+            },
+            {
+                'name': 'llama2:70b',
+                'description': 'Meta\'s Llama 2 70B parameter variant'
+            },
+            {
+                'name': 'codellama',
+                'description': 'Meta\'s Llama 2 model optimized for code completion and generation'
+            },
+            {
+                'name': 'mistral',
+                'description': 'Mistral AI\'s 7B parameter model with strong performance'
+            },
+            {
+                'name': 'mixtral',
+                'description': 'Mistral AI\'s Mixture of Experts model'
+            },
+            {
+                'name': 'dolphin-mixtral',
+                'description': 'Mixtral fine-tuned by Ehartford'
+            },
+            {
+                'name': 'neural-chat',
+                'description': 'Intel\'s neural chat model'
+            },
+            {
+                'name': 'starling-lm',
+                'description': 'Starling LM model fine-tuned on conversation data'
+            },
+            {
+                'name': 'openchat',
+                'description': 'OpenChat\'s model fine-tuned for conversation'
+            },
+            {
+                'name': 'phi',
+                'description': 'Microsoft\'s Phi model'
+            },
+            {
+                'name': 'orca-mini',
+                'description': 'Small but capable model based on Orca architecture'
             }
-        }
+        ]
+        return jsonify({'models': common_models})
+    except Exception as e:
+        logger.error(f"Error getting library models: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/fetch/models', methods=['POST'])
 @csrf.exempt
@@ -249,6 +339,53 @@ def index():
                          prompts=load_prompts())
 
 # ... rest of the code remains the same ...
+
+def get_available_models():
+    """Get list of available models from Ollama API."""
+    try:
+        response = requests.get(f"{Config.OLLAMA_HOST}/api/tags")
+        if response.status_code == 200:
+            data = response.json()
+            # Extract model names from the 'models' list, which contains objects with 'name' field
+            return [model['name'] for model in data.get('models', [])]
+        logger.error(f"Failed to get models: {response.status_code}")
+        return []
+    except Exception as e:
+        logger.error(f"Error getting models: {e}")
+        return []
+
+def load_prompts():
+    """Load prompts from JSON file."""
+    try:
+        with open('prompts.json', 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading prompts.json: {e}")
+        return {
+            'vision_models': {
+                'default': 'What do you see in this image?',
+                'suggestions': [
+                    'What do you see in this image?',
+                    'Describe this image in detail',
+                    'What objects are present in this image?',
+                    'Analyze the composition of this image',
+                    'What is the main subject of this image?'
+                ]
+            },
+            'text_models': {
+                'default': 'How can I help you today?',
+                'suggestions': [
+                    'How can I help you today?',
+                    'Tell me about yourself',
+                    'What can you do?',
+                    'Help me with a task',
+                    'Give me some information'
+                ]
+            }
+        }
+
+# Initialize history manager
+history_manager = HistoryManager(Config.HISTORY_FILE, Config.MAX_HISTORY_ENTRIES)
 
 if __name__ == '__main__':
     # Set logging level from environment

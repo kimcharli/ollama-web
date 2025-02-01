@@ -161,6 +161,102 @@ A web application built with Flask and the Ollama API for image and document ana
 - Ensure Ollama server is running locally before starting the application
 - Check the Flask debug output for any errors (debug PIN is shown in console)
 
+## TODO List
+
+### Results Management
+- [ ] Clear results section when starting new analysis
+  - Automatically clear previous results
+  - Show placeholder text indicating new analysis started
+  - Maintain history section intact
+
+### Analysis Progress
+- [ ] Enhanced timing information
+  - Display analysis start time
+  - Show real-time progress in seconds
+  - Update progress counter dynamically
+  - Format timestamps in user's local timezone
+
+### Ollama Process Status
+- [ ] Add Ollama process monitoring
+  - Show if Ollama is running or stopped
+  - Display current Ollama process status
+  - Show number of active Ollama processes
+  - Add visual indicator for Ollama health
+  - Show warning if Ollama is not running
+  - Add auto-refresh for status updates
+
+### Implementation Details
+
+#### Results Clearing
+```javascript
+// Clear results when starting new analysis
+function clearResults() {
+    const resultsDiv = document.querySelector('.results-section');
+    resultsDiv.innerHTML = '<div class="analyzing-placeholder">Starting new analysis...</div>';
+}
+```
+
+#### Progress Display
+```javascript
+// Track and display analysis progress
+let analysisStartTime = null;
+let progressInterval = null;
+
+function startProgressTracking() {
+    analysisStartTime = new Date();
+    const progressDiv = document.getElementById('progress');
+    progressDiv.innerHTML = `Started at ${analysisStartTime.toLocaleTimeString()}`;
+    
+    progressInterval = setInterval(() => {
+        const elapsed = Math.floor((new Date() - analysisStartTime) / 1000);
+        progressDiv.innerHTML += `<br>Elapsed: ${elapsed} seconds`;
+    }, 1000);
+}
+```
+
+#### Ollama Status
+```python
+@app.route('/ollama/status')
+def get_ollama_status():
+    """Get Ollama process status."""
+    try:
+        response = requests.get(f"{Config.OLLAMA_HOST}/api/status")
+        processes = subprocess.check_output(['pgrep', '-f', 'ollama']).decode().strip().split('\n')
+        return jsonify({
+            'status': 'running' if response.status_code == 200 else 'error',
+            'processes': len(processes),
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'stopped',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        })
+```
+
+### Priority
+1. Results Management (High)
+   - Critical for UX clarity
+   - Prevents confusion with old results
+   - Immediate user feedback
+
+2. Analysis Progress (Medium)
+   - Enhances user experience
+   - Better progress visibility
+   - Helps with long-running analyses
+
+3. Ollama Status (Low)
+   - Nice to have for debugging
+   - Helps with troubleshooting
+   - System health monitoring
+
+### Notes
+- All features should maintain existing UI consistency
+- Progress updates should be efficient and not impact performance
+- Status checks should be non-blocking and handle errors gracefully
+- Consider adding configuration options for refresh intervals
+
 ## Future Enhancements (Planned)
 - [ ] User authentication
 - [ ] Save favorite prompts

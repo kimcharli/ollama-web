@@ -11,10 +11,63 @@
         let promptSuggestions = {{ prompt_suggestions | default([]) | tojson | safe }};
         let prompts = {{ prompts | default({'vision_models': {'default': '', 'suggestions': []}, 'text_models': {'default': '', 'suggestions': []}}) | tojson | safe }};
         let isDropdownOpen = false;
+        let isAnalyzing = false;
 
         console.log('Initial defaultPrompt:', defaultPrompt);
         console.log('Initial promptSuggestions:', promptSuggestions);
         console.log('Initial prompts:', prompts);
+
+        // Form submission handling
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('form[action="/analyze"]');
+            const submitButton = form.querySelector('button[type="submit"]');
+            const loadingDiv = document.getElementById('loading');
+            const abortButton = document.getElementById('abortButton');
+            
+            form.addEventListener('submit', function(e) {
+                if (isAnalyzing) {
+                    e.preventDefault();
+                    return;
+                }
+                
+                isAnalyzing = true;
+                submitButton.disabled = true;
+                submitButton.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                submitButton.classList.add('bg-gray-400', 'cursor-not-allowed');
+                submitButton.textContent = 'Analyzing...';
+                loadingDiv.classList.remove('hidden');
+                abortButton.classList.remove('hidden');
+            });
+
+            // Abort button handling
+            abortButton.addEventListener('click', function() {
+                fetch('/abort', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Reset UI state
+                        isAnalyzing = false;
+                        submitButton.disabled = false;
+                        submitButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                        submitButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+                        submitButton.textContent = 'Analyze';
+                        loadingDiv.classList.add('hidden');
+                        abortButton.classList.add('hidden');
+                    } else {
+                        console.error('Error aborting:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            });
+        });
 
         // Model selection handling
         function handleModelChange(event) {
@@ -299,9 +352,17 @@
                                             </div>
 
                                             <!-- Submit Button -->
-                                            <div class="flex justify-center">
-                                                <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                                    Analyze
+                                            <div class="flex justify-center space-x-4">
+                                                <button type="submit" 
+                                                    class="inline-flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                                    {% if isAnalyzing %}disabled{% endif %}>
+                                                    <span>Analyze</span>
+                                                </button>
+                                                <button type="button" 
+                                                    id="abortButton"
+                                                    class="hidden inline-flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                                    onclick="return false;">
+                                                    Abort
                                                 </button>
                                             </div>
                                         </form>

@@ -232,3 +232,81 @@ def test_suggested_prompts_after_analyze(client, mock_requests, mock_history):
     
     # Also check that our used prompt is in history prompts
     assert prompt in html  # The used prompt should appear in history suggestions
+
+def test_abort_without_active_request(client):
+    """Test aborting when there's no active request"""
+    response = client.post('/abort')
+    assert response.status_code == 404
+    data = json.loads(response.data)
+    assert data['status'] == 'error'
+    assert 'No active analysis found' in data['message']
+
+def test_abort_with_active_request(client, mock_requests, mock_history):
+    """Test aborting an active request"""
+    mock_manager, history = mock_history
+    model = 'llama2'
+    prompt = 'Tell me a long story'
+    
+    # Create a mock response that simulates a long-running request
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.close = MagicMock()  # Add close method
+    mock_requests.return_value = mock_response
+    
+    # Start an analysis
+    with client.session_transaction() as session:
+        session['selected_model'] = model
+    
+    # Send analyze request (don't wait for it to complete)
+    client.post('/analyze', data={
+        'model': model,
+        'prompt': prompt
+    }, follow_redirects=False)
+    
+    # Verify that the request was started
+    assert mock_requests.called
+    assert mock_response.close.call_count == 0
+    
+    # Now abort the request
+    response = client.post('/abort')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['status'] == 'success'
+    assert 'Analysis aborted' in data['message']
+    
+    # Verify that the request was closed
+    assert mock_response.close.call_count == 1
+
+def test_analyze_with_streaming_response(client, mock_requests, mock_history):
+    """Test analyze endpoint with streaming response"""
+    mock_manager, history = mock_history
+    model = 'llama2'
+    prompt = 'Tell me a story'
+    
+    # Mock streaming response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.text = '\n'.join([
+        '{"message": {"content": "Once"}}',
+        '{"message": {"content": " upon"}}',
+        '{"message": {"content": " a"}}',
+        '{"message": {"content": " time"}}'
+    ])
+    mock_requests.return_value = mock_response
+    
+    # Make request
+    with client.session_transaction() as session:
+        session['selected_model'] = model
+    
+    response = client.post('/analyze', data={
+        'model': model,
+        'prompt': prompt
+    })
+    
+    # Check response
+    assert response.status_code == 200
+    html = response.data.decode()
+    assert 'Once upon a time' in html
+    
+    # Verify streaming was enabled
+    assert mock_requests.call_args[1]['stream'] is True

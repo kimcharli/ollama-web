@@ -28,11 +28,13 @@ A web application that leverages Ollama's models to analyze both images and docu
   - Context-aware loading messages
   - Visual loading spinner
   - Button disabled during analysis
-- 🏠 **Home Navigation**: Easy navigation with modern UI
+  - Abort button for long-running analyses
 - 🔁 **Streaming Response Support**: 
   - Handles streaming responses from Ollama API
   - Concatenates partial responses for complete output
   - Shows accurate timing information
+  - Supports request cancellation
+- 🏠 **Home Navigation**: Easy navigation with modern UI
 
 ## Prerequisites
 
@@ -94,6 +96,7 @@ A web application that leverages Ollama's models to analyze both images and docu
    - Click "Analyze" to process
    - View progress with loading indicator
    - See complete response with timing information
+   - Click "Abort" to cancel long-running analyses
 
 5. **View History**:
    - Scroll through previous analyses

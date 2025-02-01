@@ -75,6 +75,8 @@ DEBUG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 
 # Constants
 
+# Global variable to store active requests
+active_requests = {}
 
 @app.route('/debug_level', methods=['POST'])
 def set_debug_level():
@@ -245,7 +247,8 @@ def analyze():
                             "content": prompt,
                             "images": [file_base64]
                         }]
-                    }
+                    },
+                    stream=True  # Enable streaming for abort support
                 )
             finally:
                 # Clean up the uploaded file
@@ -261,8 +264,14 @@ def analyze():
                         "role": "user",
                         "content": prompt
                     }]
-                }
+                },
+                stream=True  # Enable streaming for abort support
             )
+        
+        # Store the request for potential abort
+        request_id = secrets.token_urlsafe(16)
+        active_requests[request_id] = response
+        session['active_request_id'] = request_id
         
         # Check response status
         if response.status_code != 200:
@@ -364,6 +373,22 @@ def analyze():
                              selected_model=model,
                              result=error_with_timing,
                              history=history)
+
+@app.route('/abort', methods=['POST'])
+def abort_analysis():
+    """Abort an ongoing analysis."""
+    try:
+        request_id = session.get('active_request_id')
+        if request_id and request_id in active_requests:
+            # Cancel the request
+            active_requests[request_id].close()
+            del active_requests[request_id]
+            session.pop('active_request_id', None)
+            return jsonify({'status': 'success', 'message': 'Analysis aborted'})
+        return jsonify({'status': 'error', 'message': 'No active analysis found'}), 404
+    except Exception as e:
+        logger.exception('Error aborting analysis')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/clear_history', methods=['POST'])
 def clear_history():

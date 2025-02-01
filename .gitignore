@@ -10,3 +10,4 @@ wheels/
 .venv
 instance/
 flask_session/
+query_history.json

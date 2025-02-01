@@ -188,32 +188,45 @@ class TestPrompts(unittest.TestCase):
             {'prompt': 'History prompt 3', 'model': 'test-model', 'duration': 1.0},
             {'prompt': 'History prompt 4', 'model': 'test-model', 'duration': 1.0},  # Should not be included due to limit
         ]
-        
-        # Mock history_manager.load_history to return our test history
-        with patch.object(history_manager, 'load_history', return_value=history):
+
+        # Create test prompts
+        test_prompts = {
+            'vision_models': {
+                'default': 'Test vision prompt',
+                'suggestions': ['Test vision prompt']
+            },
+            'text_models': {
+                'default': 'Test text prompt',
+                'suggestions': ['Test text prompt']
+            }
+        }
+
+        # Mock both history_manager and PROMPTS
+        with patch.object(history_manager, 'load_history', return_value=history), \
+             patch('app.PROMPTS', test_prompts):
             # Set environment variable for history limit
             with patch.dict('os.environ', {'HISTORY_PROMPT_LIMIT': '3'}):
                 # Set a default model
                 with self.client.session_transaction() as session:
                     session['selected_model'] = 'test-model'
-                
+
                 # Get page
                 response = self.client.get('/')
                 self.assertEqual(response.status_code, 200)
                 html = response.data.decode()
-                
+
                 # Find the promptSuggestions array in JavaScript
                 import re
                 match = re.search(r'let promptSuggestions = (\[.*?\]);', html, re.DOTALL)
                 self.assertIsNotNone(match, "Could not find promptSuggestions in HTML")
-                
+
                 suggestions_str = match.group(1)
                 suggestions = json.loads(suggestions_str)
-                
+
                 # Check that first 3 history prompts are included
                 for i in range(1, 4):
                     self.assertIn(f'History prompt {i}', suggestions)
-                
+
                 # Check that the 4th prompt is not included in suggestions
                 self.assertNotIn('History prompt 4', suggestions)
 

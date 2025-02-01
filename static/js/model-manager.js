@@ -9,12 +9,10 @@ function formatBytes(bytes) {
 
 // Model Manager functionality
 document.addEventListener('DOMContentLoaded', () => {
-    const modelSelect = document.getElementById('modelSelect');
     const refreshButton = document.getElementById('refreshModels');
     const browseButton = document.getElementById('browseLibrary');
     const libraryModels = document.getElementById('libraryModels');
     const modelsList = document.getElementById('modelsList');
-    const localModelsList = document.getElementById('localModelsList');
     const modelSelector = document.getElementById('modelSelector');
     const errorMessage = document.getElementById('errorMessage');
     const ollamaStatus = document.getElementById('ollamaStatus');
@@ -49,25 +47,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('Invalid response format');
             }
 
-            // Clear existing models
-            localModelsList.innerHTML = '';
-
-            // Add models to the list
-            data.models.forEach(model => {
-                const modelElement = document.createElement('div');
-                modelElement.className = 'flex items-center justify-between p-2 hover:bg-gray-100';
-                modelElement.innerHTML = `
-                    <div class="flex-1">
-                        <div class="text-sm font-medium" data-model="${model.name}">${model.name}</div>
-                        <div class="text-xs text-gray-500">
-                            Size: ${formatBytes(model.size)}
-                            ${model.details ? `<br>Modified: ${new Date(model.modified_at).toLocaleString()}` : ''}
-                        </div>
-                    </div>
-                `;
-                localModelsList.appendChild(modelElement);
-            });
-
             // Update model selector
             updateModelSelector(data.models);
         } catch (error) {
@@ -90,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
         models.forEach(model => {
             const option = document.createElement('option');
             option.value = model.name;
-            option.textContent = model.name;
+            option.textContent = `${model.name} (${formatBytes(model.size)})`;
             modelSelector.appendChild(option);
         });
         
@@ -98,40 +77,65 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentValue && models.some(m => m.name === currentValue)) {
             modelSelector.value = currentValue;
         }
-    }
 
-    // Fetch library models
-    async function fetchLibraryModels() {
-        try {
-            const response = await fetch('/library/models');
-            if (!response.ok) throw new Error('Failed to fetch library models');
-            
-            const data = await response.json();
-            showLibraryModels(data.models || []);
-        } catch (error) {
-            showError('Error fetching library models: ' + error.message);
+        // If only one model is available, select it
+        if (models.length === 1) {
+            modelSelector.value = models[0].name;
+            // Update hidden model input
+            const modelInput = document.getElementById('model');
+            if (modelInput) {
+                modelInput.value = models[0].name;
+            }
         }
     }
 
-    // Show library models
-    function showLibraryModels(models) {
-        modelsList.innerHTML = '';
-        models.forEach(model => {
-            const div = document.createElement('div');
-            div.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg';
-            div.innerHTML = `
-                <div>
-                    <div class="font-medium">${model.name}</div>
-                    <div class="text-sm text-gray-500">${model.description}</div>
-                </div>
-                <button class="pull-model-btn inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                        data-model="${model.name}">
-                    Pull Model
-                </button>
-            `;
-            modelsList.appendChild(div);
-        });
-        libraryModels.classList.remove('hidden');
+    // Browse library models
+    async function browseLibrary() {
+        try {
+            const response = await fetch('/library/models', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch library models');
+            }
+
+            const data = await response.json();
+            if (!data.models) {
+                throw new Error('Invalid response format');
+            }
+
+            // Clear and show models list
+            modelsList.innerHTML = '';
+            libraryModels.classList.remove('hidden');
+
+            // Add models to the list
+            data.models.forEach(model => {
+                const modelElement = document.createElement('div');
+                modelElement.className = 'flex items-center justify-between p-2 hover:bg-gray-50';
+                modelElement.innerHTML = `
+                    <div class="flex-1">
+                        <div class="text-sm font-medium text-gray-900">${model.name}</div>
+                        ${model.description ? `<div class="text-xs text-gray-500">${model.description}</div>` : ''}
+                    </div>
+                    <button class="pull-model-btn ml-4 px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600" data-model="${model.name}">
+                        Pull
+                    </button>
+                `;
+
+                // Add click handler for pull button
+                const pullButton = modelElement.querySelector('.pull-model-btn');
+                pullButton.addEventListener('click', () => pullModel(model.name));
+
+                modelsList.appendChild(modelElement);
+            });
+        } catch (error) {
+            showError('Error fetching library models: ' + error.message);
+        }
     }
 
     // Pull model
@@ -249,6 +253,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Load current model
+    async function loadCurrentModel() {
+        try {
+            const response = await fetch('/api/current-model');
+            if (!response.ok) {
+                throw new Error('Failed to fetch current model');
+            }
+
+            const data = await response.json();
+            if (data.model) {
+                modelSelector.value = data.model;
+                // Update hidden model input
+                const modelInput = document.getElementById('model');
+                if (modelInput) {
+                    modelInput.value = data.model;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading current model:', error);
+        }
+    }
+
     // Check status periodically
     async function startStatusCheck() {
         // Initial check
@@ -271,25 +297,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     body: JSON.stringify({ model: selectedModel })
                 });
-                
+
                 if (!response.ok) {
                     throw new Error('Failed to select model');
                 }
-                
-                // Update any model inputs on the page
-                const modelInputs = document.querySelectorAll('input[name="model"]');
-                modelInputs.forEach(input => {
-                    input.value = selectedModel;
-                });
+
+                // Update hidden model input
+                const modelInput = document.getElementById('model');
+                if (modelInput) {
+                    modelInput.value = selectedModel;
+                }
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    showError(`Model ${selectedModel} selected`, 'success');
+                } else {
+                    throw new Error('Failed to select model');
+                }
             } catch (error) {
-                showError('Error selecting model: ' + error.message);
+                console.error('Error selecting model:', error);
+                showError('Failed to select model');
             }
         }
     });
 
-    // Event Listeners
+    // Event listeners
+    browseButton.addEventListener('click', browseLibrary);
     refreshButton.addEventListener('click', fetchLocalModels);
-    browseButton.addEventListener('click', fetchLibraryModels);
     modelsList.addEventListener('click', (e) => {
         const pullButton = e.target.closest('.pull-model-btn');
         if (pullButton) {
@@ -298,9 +332,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Start status checking when page loads
+    // Initialize
     startStatusCheck();
-
-    // Initial fetch of local models
+    loadCurrentModel();
     fetchLocalModels();
 });

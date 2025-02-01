@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import timedelta
 
 # Load environment variables from .env file
 env_path = Path('.') / '.env'
@@ -14,6 +15,11 @@ class Config:
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'default-secret-key')
     DEBUG = os.getenv('FLASK_DEBUG', '0').lower() in ('true', '1', 't')
     PORT = int(os.getenv('FLASK_PORT', '5001'))
+    
+    # Session configuration
+    SESSION_TYPE = 'filesystem'
+    PERMANENT_SESSION_LIFETIME = timedelta(days=365)
+    SESSION_PERMANENT = True
     
     # File Storage Configuration
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
@@ -57,13 +63,20 @@ class Config:
     @classmethod
     def init_app(cls, app):
         """Initialize application configuration"""
+        # Set secret key
+        app.secret_key = cls.SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'your-secret-key')
+        
+        # Ensure instance path exists
+        os.makedirs(app.instance_path, exist_ok=True)
+        
+        # Set up file paths
+        cls.HISTORY_FILE = os.path.join(app.instance_path, 'history.json')
+        cls.MAX_HISTORY_ENTRIES = 100
+        
         # Set configuration values from environment or use defaults
-        cls.SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'default-secret-key')
         cls.DEBUG = os.getenv('FLASK_DEBUG', '0').lower() in ('true', '1', 't')
         cls.PORT = int(os.getenv('FLASK_PORT', '5001'))
         cls.UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
-        cls.HISTORY_FILE = os.getenv('HISTORY_FILE', 'query_history.json')
-        cls.MAX_HISTORY_ENTRIES = int(os.getenv('MAX_HISTORY_ENTRIES', '100'))
         cls.HISTORY_PROMPT_LIMIT = int(os.getenv('HISTORY_PROMPT_LIMIT', '3'))
         cls.OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
         cls.PROMPTS_FILE = os.getenv('PROMPTS_FILE', 'prompts.json')

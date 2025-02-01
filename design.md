@@ -266,3 +266,179 @@ def get_ollama_status():
 - [ ] Advanced model configuration options
 - [ ] Custom model integration
 - [ ] Result sharing functionality
+
+## Architecture
+
+### Components
+
+1. **Flask Backend**
+   - Handles HTTP requests and responses
+   - Manages model selection and analysis
+   - Provides Server-Sent Events (SSE) for streaming responses
+   - Manages history and configuration
+
+2. **Frontend**
+   - HTML/CSS/JavaScript implementation
+   - Real-time response display
+   - Interactive UI elements
+   - Responsive design with Tailwind CSS
+
+3. **Managers**
+   - `FetchManager`: Handles Ollama API interactions
+   - `HistoryManager`: Manages prompt history and suggestions
+
+### Data Flow
+
+1. **Model Selection**
+   - Frontend fetches available models
+   - User selects a model
+   - Selection stored for the session
+
+2. **Prompt Handling**
+   - User enters prompt or selects from suggestions
+   - Prompt sent to backend
+   - Backend processes with selected model
+   - Response streamed back to frontend
+
+3. **History Management**
+   - Successful prompts stored in history
+   - History used for prompt suggestions
+   - Configurable history limits
+
+## Features
+
+### Implemented
+
+1. **Model Management**
+   - List available models
+   - Model selection and persistence
+   - Model type detection (text/vision)
+
+2. **Prompt System**
+   - Default prompts by model type
+   - Prompt suggestions from history
+   - Customizable suggestions
+
+3. **Analysis**
+   - Text analysis with streaming response
+   - Image analysis with file upload
+   - Real-time response display
+   - Abort functionality
+
+4. **History**
+   - Configurable history storage
+   - History-based suggestions
+   - Clear history option
+
+5. **UI/UX**
+   - Responsive design
+   - Loading indicators
+   - Error handling
+   - Debug logging
+
+### Planned
+
+1. **Enhanced Model Management**
+   - Model tags and filtering
+   - Model details display
+   - Model performance metrics
+
+2. **Advanced Prompt Features**
+   - Prompt templates
+   - Parameter customization
+   - Batch processing
+
+3. **History Enhancements**
+   - Search and filter history
+   - Export/import history
+   - History analytics
+
+4. **UI Improvements**
+   - Dark mode support
+   - Mobile optimization
+   - Keyboard shortcuts
+   - Customizable layout
+
+## Technical Details
+
+### API Endpoints
+
+1. **Model Management**
+   - `GET /`: Main application page
+   - `POST /fetch/models`: Get available models
+   - `POST /select_model`: Select active model
+
+2. **Analysis**
+   - `POST /analyze`: Process prompt with model
+   - `POST /abort`: Abort current analysis
+
+3. **History**
+   - `POST /clear_history`: Clear history
+   - History stored in JSON file
+
+### Configuration
+
+1. **Environment Variables**
+   - `FLASK_PORT`: Application port
+   - `OLLAMA_HOST`: Ollama API host
+   - `HISTORY_FILE`: History storage path
+   - `MAX_HISTORY_ENTRIES`: History limit
+   - `HISTORY_PROMPT_LIMIT`: Suggestion limit
+
+2. **File Structure**
+   - `app.py`: Main application
+   - `fetch_manager.py`: API handling
+   - `history_manager.py`: History management
+   - `prompts.json`: Default prompts
+   - `config.py`: Configuration
+
+## Testing
+
+1. **Unit Tests**
+   - Manager functionality
+   - Route handling
+   - Configuration loading
+
+2. **Integration Tests**
+   - API interactions
+   - History management
+   - Model selection
+
+3. **UI Tests**
+   - Component rendering
+   - User interactions
+   - Response handling
+
+## Security
+
+1. **Implemented**
+   - CSRF protection
+   - Input validation
+   - Error handling
+   - File upload restrictions
+
+2. **Planned**
+   - Authentication
+   - Rate limiting
+   - API key management
+   - Session management
+
+## Contributing
+
+1. **Guidelines**
+   - Follow Python style guide
+   - Write tests for new features
+   - Update documentation
+   - Use descriptive commit messages
+
+2. **Process**
+   - Fork repository
+   - Create feature branch
+   - Submit pull request
+   - Review and merge
+
+## Resources
+
+- [Flask Documentation](https://flask.palletsprojects.com/)
+- [Ollama API Documentation](https://github.com/jmorganca/ollama/blob/main/docs/api.md)
+- [Tailwind CSS Documentation](https://tailwindcss.com/docs)

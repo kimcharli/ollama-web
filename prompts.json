@@ -1,22 +1,32 @@
 {
+  "text_models": {
+    "default": "You are a helpful AI assistant. Please help me with my question.",
+    "suggestions": [
+      "You are a helpful AI assistant. Please help me with my question.",
+      "Explain this concept in simple terms.",
+      "Help me debug this code.",
+      "Write a function that...",
+      "What are the best practices for...",
+      "Compare and contrast...",
+      "Analyze this text and provide insights.",
+      "Generate a creative story about...",
+      "Help me optimize this algorithm.",
+      "Explain the pros and cons of..."
+    ]
+  },
   "vision_models": {
     "default": "What do you see in this image?",
     "suggestions": [
       "What do you see in this image?",
-      "Describe this image in detail",
+      "Describe this image in detail.",
       "What objects are present in this image?",
-      "Analyze the composition of this image",
-      "What is the main subject of this image?"
-    ]
-  },
-  "text_models": {
-    "default": "Please analyze this text:",
-    "suggestions": [
-      "Please analyze this text:",
-      "Summarize this document",
-      "What are the key points in this text?",
-      "Extract the main ideas from this text",
-      "Provide a detailed analysis of this text"
+      "What is the main subject of this image?",
+      "Analyze the composition of this image.",
+      "What emotions does this image convey?",
+      "What is happening in this scene?",
+      "Identify any text or symbols in this image.",
+      "What is unique or interesting about this image?",
+      "Compare this image to..."
     ]
   }
 }

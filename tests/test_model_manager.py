@@ -12,26 +12,17 @@ class TestModelManager(unittest.TestCase):
         self.fetch_manager = FetchManager()
 
     def test_fetch_models_list(self):
-        # Mock response from Ollama API
-        mock_response = {
-            "models": [
-                {
-                    "name": "llama2",
-                    "modified_at": "2024-01-31T12:00:00Z",
-                    "size": 4000000000
-                },
-                {
-                    "name": "mistral",
-                    "modified_at": "2024-01-31T12:00:00Z",
-                    "size": 3000000000
-                }
-            ]
-        }
-        
-        with patch('requests.get') as mock_get:
+        # Mock subprocess.run to simulate ollama list output
+        mock_output = """
+NAME                    ID              SIZE     MODIFIED
+llama2                 abcd1234        4.0 GB   2 weeks ago
+mistral                efgh5678        3.0 GB   2 weeks ago
+"""
+        with patch('subprocess.run') as mock_run:
             # Configure mock
-            mock_get.return_value.ok = True
-            mock_get.return_value.json.return_value = mock_response
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = mock_output
+            mock_run.return_value.stderr = ""
             
             # Test /fetch/models endpoint
             response = self.client.post('/fetch/models')

@@ -3,13 +3,17 @@ import secrets
 import logging
 import requests
 import base64
-from datetime import datetime
-from flask import Flask, render_template, request, jsonify, session, Response
+import time
+import json
+from datetime import datetime, timedelta
+from flask import Flask, render_template, request, jsonify, Response, make_response
 from werkzeug.utils import secure_filename
 from config import Config
 from history_manager import HistoryManager
 from fetch_manager import FetchManager
 import json
+from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -19,17 +23,93 @@ logger.addHandler(handler)
 
 # Initialize Flask app
 app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(32))
+app.config.from_object(Config)
 
-# Initialize configuration
-Config.init_app(app)
+# Ensure secret key is set
+if not app.secret_key:
+    app.secret_key = 'dev-secret-key-change-in-production'  # For development only
+
+# Initialize SQLAlchemy for sessions
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sessions.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# Session model
+class Session(db.Model):
+    id = db.Column(db.String(256), primary_key=True)
+    data = db.Column(db.String(1024))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @classmethod
+    def get_or_create(cls, session_id=None):
+        if not session_id:
+            session_id = secrets.token_hex(32)
+        sess = cls.query.get(session_id)
+        if not sess:
+            sess = cls(id=session_id)
+            db.session.add(sess)
+            db.session.commit()
+        return sess, session_id
+
+    def set_data(self, data):
+        self.data = data
+        self.updated_at = datetime.utcnow()
+        db.session.add(self)
+        db.session.commit()
+
+    def get_data(self):
+        return self.data
+
+# Create tables
+with app.app_context():
+    db.create_all()
 
 # Initialize CSRF protection
-from flask_wtf.csrf import CSRFProtect
 csrf = CSRFProtect(app)
 
+# Session handling routes
+@app.route('/api/select-model', methods=['POST'])
+def api_select_model():
+    """Select a model and store in session."""
+    try:
+        data = request.get_json()
+        model = data.get('model')
+        if not model:
+            return jsonify({'status': 'error', 'message': 'No model specified'}), 400
+        
+        # Store selected model in session
+        session_id = request.cookies.get('session_id')
+        if session_id:
+            sess, _ = Session.get_or_create(session_id)
+            sess.set_data(model)
+        
+        return jsonify({
+            'status': 'success',
+            'model': model
+        })
+    except Exception as e:
+        logger.error(f'Error in api_select_model: {e}')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/current-model', methods=['GET'])
+def get_current_model():
+    """Get currently selected model from session."""
+    try:
+        session_id = request.cookies.get('session_id')
+        if session_id:
+            sess = Session.query.get(session_id)
+            if sess:
+                model = sess.get_data()
+                logger.info(f"Getting current model from session: {model}")
+                return jsonify({'model': model})
+        return jsonify({'model': None})
+    except Exception as e:
+        logger.error(f"Error getting current model: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # Initialize history manager
-history_manager = HistoryManager(app.config['HISTORY_FILE'], app.config['MAX_HISTORY_ENTRIES'])
+history_manager = HistoryManager(Config.HISTORY_FILE, Config.MAX_HISTORY_ENTRIES)
 
 # Initialize fetch manager
 fetch_manager = FetchManager()
@@ -97,7 +177,10 @@ def set_debug_level():
             }), 400
         
         # Set the debug level in session
-        session['debug_level'] = level
+        session_id = request.cookies.get('session_id')
+        if session_id:
+            sess, _ = Session.get_or_create(session_id)
+            sess.set_data(level)
         
         # Log messages at different levels for testing
         logger.debug('Debug message - should show if level is DEBUG or lower')
@@ -132,47 +215,39 @@ def models():
         return jsonify([])
 
 @app.route('/')
-def home():
-    """Home page route."""
-    # Get available models
-    models = get_available_models()
-    
-    # Get selected model from session, use first available model as default
-    selected_model = session.get('selected_model')
-    if not selected_model and models:
-        selected_model = models[0]
-        session['selected_model'] = selected_model
-    
-    # Get all prompts
-    all_prompts = []
-    for model_type in ['vision_models', 'text_models']:
-        if model_type in PROMPTS and 'suggestions' in PROMPTS[model_type]:
+def index():
+    """Render the index page."""
+    try:
+        # Get available models and select first one as default
+        models = get_available_models()
+        default_model = models[0] if models else None
+        
+        # Load history
+        history = history_manager.load_history()
+        history_limit = int(os.getenv('HISTORY_PROMPT_LIMIT', '3'))
+        history_prompts = get_history_prompts(history, None, history_limit)
+        
+        # Get all prompts and suggestions
+        all_prompts = []
+        for model_type in ['vision_models', 'text_models']:
             all_prompts.extend(PROMPTS[model_type]['suggestions'])
-    
-    # Get history prompts
-    history = history_manager.load_history()
-    history_limit = int(os.getenv('HISTORY_PROMPT_LIMIT', '3'))
-    app.logger.debug(f"Loaded history: {history}")
-    history_prompts = get_history_prompts(history, None, history_limit)
-    app.logger.debug(f"History prompts: {history_prompts}")
-    
-    # Combine all prompts with history prompts
-    prompt_suggestions = list(dict.fromkeys(all_prompts + history_prompts))  # Remove duplicates while preserving order
-    app.logger.debug(f"All prompts: {all_prompts}")
-    app.logger.debug(f"Combined prompt suggestions: {prompt_suggestions}")
-    
-    # Use text model default prompt as default
-    default_prompt = PROMPTS['text_models']['default']
-    
-    # Render template with data
-    return render_template('index.html',
-                        models=models,
-                        selected_model=selected_model,
-                        debug_levels=DEBUG_LEVELS,
-                        current_debug_level=session.get('debug_level', 'INFO'),
-                        prompt_suggestions=prompt_suggestions,
-                        default_prompt=default_prompt,
-                        prompts=PROMPTS)
+        
+        prompt_suggestions = history_prompts + [p for p in all_prompts if p not in history_prompts]
+        
+        logger.info(f'Loaded {len(models)} models')
+        logger.info(f'Using default model: {default_model}')
+        logger.info(f'Loaded {len(history)} history entries')
+        logger.info(f'Loaded {len(prompt_suggestions)} prompt suggestions')
+        
+        return render_template('index.html', 
+                            models=models,
+                            model=default_model['name'] if default_model else None,
+                            prompts=PROMPTS,
+                            prompt_suggestions=prompt_suggestions,
+                            default_prompt=PROMPTS['text_models']['default'])
+    except Exception as e:
+        logger.error(f'Error rendering index: {e}')
+        return f'Error: {str(e)}', 500
 
 @app.route('/select_model', methods=['POST'])
 def select_model():
@@ -182,7 +257,10 @@ def select_model():
         return jsonify({'status': 'error', 'message': 'No model specified'}), 400
     
     # Store selected model in session
-    session['selected_model'] = model
+    session_id = request.cookies.get('session_id')
+    if session_id:
+        sess, _ = Session.get_or_create(session_id)
+        sess.set_data(model)
     
     # Get all prompts
     all_prompts = []
@@ -209,190 +287,228 @@ def select_model():
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    """Analyze an image or process a text prompt."""
-    start_time = datetime.now()
-    model = request.form.get('model')
-    prompt = request.form.get('prompt', 'Analyze this.')
-    
+    """Analyze prompt with selected model."""
     try:
+        # Get model and prompt
+        model = request.form.get('model')
+        prompt = request.form.get('prompt')
         logger.info(f'Starting analysis with model: {model}')
         logger.info(f'Prompt: {prompt}')
-        
-        # Update session with current model if provided, otherwise use session model
-        if model:
-            session['selected_model'] = model
-            logger.debug(f'Updated session model to: {model}')
-        else:
-            model = session.get('selected_model')
-            logger.debug(f'Using model from session: {model}')
-        
-        # Handle file if provided
-        if 'file' in request.files and request.files['file'].filename:
-            file = request.files['file']
-            filename = secure_filename(file.filename)
-            
-            # Save and process file
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            
-            try:
-                # Read file as base64
-                with open(filepath, 'rb') as f:
-                    file_data = f.read()
-                file_base64 = base64.b64encode(file_data).decode('utf-8')
-                
-                # Use Ollama API with image
-                response = requests.post(
-                    f"{Config.OLLAMA_HOST}/api/chat",
-                    json={
-                        "model": model,
-                        "messages": [{
-                            "role": "user",
-                            "content": prompt,
-                            "images": [file_base64]
-                        }]
-                    },
-                    stream=True  # Enable streaming for abort support
-                )
-            finally:
-                # Clean up the uploaded file
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-        else:
-            # Use Ollama API without image
-            response = requests.post(
-                f"{Config.OLLAMA_HOST}/api/chat",
-                json={
-                    "model": model,
-                    "messages": [{
-                        "role": "user",
-                        "content": prompt
-                    }]
-                },
-                stream=True  # Enable streaming for abort support
-            )
-        
-        # Store the request for potential abort
-        request_id = secrets.token_urlsafe(16)
-        active_requests[request_id] = response
-        session['active_request_id'] = request_id
-        
-        # Check response status
-        if response.status_code != 200:
-            error_msg = f"Error from Ollama API: {response.text}"
-            logger.error(error_msg)
-            return render_template('index.html', 
-                                 models=get_available_models(),
-                                 debug_levels=DEBUG_LEVELS,
-                                 current_debug_level=session.get('debug_level', 'INFO'),
-                                 result=error_msg)
-        
-        # Parse response
-        try:
-            lines = response.text.strip().split('\n')
-            full_response = ""
-            
-            # Process each line of the streaming response
-            for line in lines:
-                try:
-                    response_json = json.loads(line)
-                    if 'message' in response_json:
-                        # Chat response
-                        content = response_json['message']['content']
-                        full_response += content
-                    elif 'response' in response_json:
-                        # Generate response
-                        content = response_json['response']
-                        full_response += content
-                except json.JSONDecodeError:
-                    # Skip invalid JSON lines
-                    continue
-            
-            end_time = datetime.now()
-            duration = (end_time - start_time).total_seconds()
-            
-            # Format response with timing
-            result_with_timing = f"Response (took {duration:.2f} seconds):\n\n{full_response}"
-            
-            # Add to persistent history
-            history = history_manager.add_entry(
-                model=model,
-                prompt=prompt,
-                result=result_with_timing,
-                duration=duration,
-                success=True
-            )
-        except Exception as e:
-            error_msg = f"Error parsing response: {str(e)}"
-            logger.error(error_msg)
-            logger.error(f"Response text: {response.text}")
-            return render_template('index.html', 
-                                models=get_available_models(),
-                                debug_levels=DEBUG_LEVELS,
-                                current_debug_level=session.get('debug_level', 'INFO'),
-                                result=error_msg)
-        
-        # Get prompt suggestions
+
+        # Check if it's an AJAX request
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        logger.info(f'Request type: {"AJAX" if is_ajax else "regular"}')
+
+        # Get all prompts and suggestions
+        history = history_manager.load_history()
         history_limit = int(os.getenv('HISTORY_PROMPT_LIMIT', '3'))
         history_prompts = get_history_prompts(history, None, history_limit)
         
-        prompt_suggestions = [
-            'What do you see in this image?',
-            'Describe this image in detail',
-            'What objects are present in this image?',
-            'Analyze the composition of this image',
-            'What is the main subject of this image?'
-        ]
+        all_prompts = []
+        for model_type in ['vision_models', 'text_models']:
+            all_prompts.extend(PROMPTS[model_type]['suggestions'])
         
-        # Combine suggestions with history prompts
-        prompt_suggestions = prompt_suggestions + [p for p in history_prompts if p not in prompt_suggestions]
-        
-        logger.info('Analysis completed successfully')
-        return render_template('index.html', 
-                             models=get_available_models(),
-                             debug_levels=DEBUG_LEVELS,
-                             current_debug_level=session.get('debug_level', 'INFO'),
-                             selected_model=model,
-                             result=result_with_timing,
-                             history=history,
-                             prompt_suggestions=prompt_suggestions)
-    
-    except Exception as e:
-        logger.exception('Error in analyze')
-        error_with_timing = f"Error (after {(datetime.now() - start_time).total_seconds():.2f} seconds): {str(e)}"
-        
-        # Add to persistent history
-        history = history_manager.add_entry(
-            model=model,
-            prompt=prompt,
-            result=error_with_timing,
-            duration=(datetime.now() - start_time).total_seconds(),
-            success=False
+        prompt_suggestions = history_prompts + [p for p in all_prompts if p not in history_prompts]
+
+        # Handle file if provided
+        file = request.files.get('file')
+        if file:
+            # Process file for vision model
+            image_data = file.read()
+            image_b64 = base64.b64encode(image_data).decode()
+            messages = [
+                {
+                    'role': 'user',
+                    'content': prompt,
+                    'images': [image_b64]
+                }
+            ]
+            data = {'model': model, 'messages': messages}
+        else:
+            # Regular text prompt
+            data = {'model': model, 'prompt': prompt}
+
+        # Make request to Ollama API
+        start_time = time.time()
+        response = requests.post(
+            f'{Config.OLLAMA_HOST}/api/chat' if file else f'{Config.OLLAMA_HOST}/api/generate',
+            json=data,
+            stream=True
         )
+
+        # Store request for potential abort
+        request_id = secrets.token_urlsafe(16)
+        active_requests[request_id] = response
+
+        # Check response status
+        if response.status_code != 200:
+            error_msg = f'Error from Ollama API: {response.text}'
+            logger.error(error_msg)
+            if not is_ajax:
+                return render_template('index.html', 
+                                    models=get_available_models(),
+                                    model=model,
+                                    prompts=PROMPTS,
+                                    prompt_suggestions=prompt_suggestions,
+                                    default_prompt=PROMPTS['text_models']['default'],
+                                    result=error_msg)
+            else:
+                return jsonify({'error': error_msg}), response.status_code
+
+        # Stream the response
+        def generate():
+            try:
+                full_response = ''
+                response_start = time.time()
+
+                for line in response.iter_lines():
+                    if line:
+                        try:
+                            json_line = json.loads(line)
+                            logger.debug(f'Received line: {json_line}')
+                            if 'response' in json_line:
+                                chunk = json_line['response']
+                                full_response += chunk
+                                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+                            elif 'error' in json_line:
+                                error_msg = f"Error from Ollama API: {json_line['error']}"
+                                logger.error(error_msg)
+                                yield f"data: {json.dumps({'error': error_msg})}\n\n"
+                                break
+                        except json.JSONDecodeError as e:
+                            error_msg = f'Error decoding JSON response: {e}'
+                            logger.error(error_msg)
+                            yield f"data: {json.dumps({'error': error_msg})}\n\n"
+                            break
+
+                # Store in history after successful completion
+                if full_response:
+                    try:
+                        duration = time.time() - response_start
+                        history_manager.add_entry(
+                            model=model,
+                            prompt=prompt,
+                            result=full_response,
+                            duration=duration,
+                            success=True
+                        )
+                        logger.info(f'Analysis completed in {duration:.2f} seconds')
+                    except Exception as e:
+                        logger.error(f'Error adding to history: {e}')
+                        # Don't stop the response if history fails
+                        pass
+
+                # Clean up request
+                if request_id in active_requests:
+                    del active_requests[request_id]
+
+                yield f"data: {json.dumps({'done': True})}\n\n"
+
+            except Exception as e:
+                error_msg = f'Error during analysis: {str(e)}'
+                logger.error(error_msg)
+                yield f"data: {json.dumps({'error': error_msg})}\n\n"
+
+            finally:
+                # Always clean up request
+                if request_id in active_requests:
+                    del active_requests[request_id]
+
+        # Return streamed response for AJAX requests
+        if is_ajax:
+            return Response(generate(), mimetype='text/event-stream')
         
+        # For non-AJAX requests, collect the full response and render the template
+        full_response = ''
+        for line in response.iter_lines():
+            if line:
+                try:
+                    json_line = json.loads(line)
+                    if 'response' in json_line:
+                        full_response += json_line['response']
+                    elif 'error' in json_line:
+                        error_msg = f"Error from Ollama API: {json_line['error']}"
+                        logger.error(error_msg)
+                        return render_template('index.html', 
+                                            models=get_available_models(),
+                                            model=model,
+                                            prompts=PROMPTS,
+                                            prompt_suggestions=prompt_suggestions,
+                                            default_prompt=PROMPTS['text_models']['default'],
+                                            result=error_msg)
+                except json.JSONDecodeError as e:
+                    error_msg = f'Error decoding JSON response: {e}'
+                    logger.error(error_msg)
+                    return render_template('index.html', 
+                                        models=get_available_models(),
+                                        model=model,
+                                        prompts=PROMPTS,
+                                        prompt_suggestions=prompt_suggestions,
+                                        default_prompt=PROMPTS['text_models']['default'],
+                                        result=error_msg)
+
+        # Store in history
+        try:
+            duration = time.time() - start_time
+            history_manager.add_entry(
+                model=model,
+                prompt=prompt,
+                result=full_response,
+                duration=duration,
+                success=True
+            )
+            logger.info(f'Analysis completed in {duration:.2f} seconds')
+        except Exception as e:
+            logger.error(f'Error adding to history: {e}')
+
         return render_template('index.html', 
-                             models=get_available_models(),
-                             debug_levels=DEBUG_LEVELS,
-                             current_debug_level=session.get('debug_level', 'INFO'),
-                             selected_model=model,
-                             result=error_with_timing,
-                             history=history)
+                            models=get_available_models(),
+                            model=model,
+                            prompts=PROMPTS,
+                            prompt_suggestions=prompt_suggestions,
+                            default_prompt=PROMPTS['text_models']['default'],
+                            result=full_response)
+
+    except Exception as e:
+        error_msg = f'Error during analysis: {str(e)}'
+        logger.error(error_msg)
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': error_msg}), 500
+        return render_template('index.html', 
+                            models=get_available_models(),
+                            model=model,
+                            prompts=PROMPTS,
+                            prompt_suggestions=prompt_suggestions,
+                            default_prompt=PROMPTS['text_models']['default'],
+                            result=error_msg)
 
 @app.route('/abort', methods=['POST'])
 def abort_analysis():
-    """Abort an ongoing analysis."""
+    """Abort the current analysis."""
     try:
-        request_id = session.get('active_request_id')
-        if request_id and request_id in active_requests:
-            # Cancel the request
-            active_requests[request_id].close()
-            del active_requests[request_id]
-            session.pop('active_request_id', None)
-            return jsonify({'status': 'success', 'message': 'Analysis aborted'})
-        return jsonify({'status': 'error', 'message': 'No active analysis found'}), 404
+        # Check if there are any active requests
+        if not active_requests:
+            return jsonify({
+                'status': 'error',
+                'message': 'No active request to abort'
+            }), 404
+
+        # Get active request
+        request_id = next(iter(active_requests))
+        response = active_requests.pop(request_id)
+        if hasattr(response, 'close'):
+            response.close()
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Analysis aborted'
+        })
     except Exception as e:
-        logger.exception('Error aborting analysis')
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        logger.error(f'Error aborting analysis: {str(e)}')
+        return jsonify({
+            'status': 'error',
+            'message': f'Error aborting analysis: {str(e)}'
+        }), 500
 
 @app.route('/clear_history', methods=['POST'])
 def clear_history():
@@ -416,35 +532,6 @@ def fetch_models():
         return jsonify(models_data)
     except Exception as e:
         logger.error(f"Error in fetch_models: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/current-model', methods=['GET'])
-def get_current_model():
-    """Get the currently selected model."""
-    try:
-        selected_model = session.get('selected_model')
-        logger.info(f"Current model: {selected_model}")
-        return jsonify({'model': selected_model})
-    except Exception as e:
-        logger.error(f"Error getting current model: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/select-model', methods=['POST'])
-@csrf.exempt
-def api_select_model():
-    """Select a model to use."""
-    try:
-        model = request.json.get('model')
-        if not model:
-            logger.error("Model name is required")
-            return jsonify({'error': 'Model name is required'}), 400
-            
-        # Store selected model in session
-        session['selected_model'] = model
-        logger.info(f"Selected model: {model}")
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        logger.error(f"Error selecting model: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/library/models', methods=['GET'])
@@ -485,38 +572,22 @@ def pull_model():
         logger.error(f"Error in pull_model: {e}")
         return jsonify({'error': str(e)}), 500
 
-def get_history_prompts(history, model_type, limit=3):
-    """Get unique prompts from history for a specific model type."""
-    app.logger.debug(f"Getting history prompts with model_type={model_type}, limit={limit}")
-    if not history:
-        app.logger.debug("No history found")
-        return []
-        
+def get_history_prompts(history=None, model_type=None, limit=None):
+    """Get prompt suggestions from history."""
+    if history is None:
+        history = history_manager.load_history()
+    if limit is None:
+        limit = Config.HISTORY_PROMPT_LIMIT
+
     prompts = []
-    seen = set()
-    
-    for entry in history:
-        prompt = entry.get('prompt')
-        app.logger.debug(f"Processing entry: {entry}")
-        if not prompt or prompt in seen:
-            app.logger.debug(f"Skipping prompt: {prompt} (empty or duplicate)")
+    for entry in history[:limit]:
+        try:
+            if 'prompt' in entry:
+                prompts.append(entry['prompt'])
+        except Exception as e:
+            logger.error(f'Error processing history entry: {e}')
             continue
-            
-        # Check if model type matches
-        is_vision = is_vision_model(entry.get('model', ''))
-        current_type = 'vision' if is_vision else 'text'
-        app.logger.debug(f"Entry model type: {current_type}")
-        
-        if model_type is None or current_type == model_type:
-            app.logger.debug(f"Adding prompt: {prompt}")
-            prompts.append(prompt)
-            seen.add(prompt)
-            
-            if len(prompts) >= limit:
-                app.logger.debug(f"Reached limit of {limit} prompts")
-                break
-    
-    app.logger.debug(f"Returning prompts: {prompts}")
+
     return prompts
 
 def is_vision_model(model_name):
@@ -546,8 +617,7 @@ def get_available_models():
     try:
         response = requests.get(f"{Config.OLLAMA_HOST}/api/tags")
         if response.status_code == 200:
-            models = response.json().get('models', [])
-            return [model['name'] for model in models] if models else []
+            return response.json().get('models', [])
         return []
     except Exception as e:
         app.logger.error(f"Error getting models: {e}")

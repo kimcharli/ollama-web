@@ -8,26 +8,99 @@
     <script src="{{ url_for('static', filename='js/fetch-button.js') }}"></script>
     <script>
         // Global variables
-        let defaultPrompt = "{{ default_prompt | default('') | safe }}";
-        let promptSuggestions = {{ prompt_suggestions | default([]) | tojson | safe }};
+        let defaultPrompt = {{ default_prompt | tojson | safe }};
+        let promptSuggestions = {{ prompt_suggestions | tojson | safe }};
         let prompts = {{ prompts | default({'vision_models': {'default': '', 'suggestions': []}, 'text_models': {'default': '', 'suggestions': []}}) | tojson | safe }};
-        let isDropdownOpen = false;
         let isAnalyzing = false;
 
         console.log('Initial defaultPrompt:', defaultPrompt);
         console.log('Initial promptSuggestions:', promptSuggestions);
         console.log('Initial prompts:', prompts);
 
+        // Initialize prompt suggestions
+        const promptSuggestionsList = {{ prompt_suggestions | tojson | safe }};
+        console.log('Prompt suggestions:', promptSuggestionsList);
+
+        // Prompt dropdown handling
+        document.addEventListener('DOMContentLoaded', function() {
+            const promptDropdownButton = document.getElementById('promptDropdownButton');
+            const promptDropdown = document.getElementById('promptDropdown');
+            const promptInput = document.getElementById('prompt');
+
+            if (promptDropdownButton && promptDropdown) {
+                console.log('Found prompt dropdown elements');
+                
+                // Toggle dropdown
+                promptDropdownButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Toggling prompt dropdown');
+                    promptDropdown.classList.toggle('hidden');
+                });
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', function(event) {
+                    if (!promptDropdownButton.contains(event.target) && !promptDropdown.contains(event.target)) {
+                        promptDropdown.classList.add('hidden');
+                    }
+                });
+
+                // Handle suggestion clicks
+                promptDropdown.querySelectorAll('button[role="menuitem"]').forEach(button => {
+                    button.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const suggestion = this.textContent.trim();
+                        console.log('Selected suggestion:', suggestion);
+                        if (promptInput) {
+                            promptInput.value = suggestion;
+                            promptDropdown.classList.add('hidden');
+                        }
+                    });
+                });
+            } else {
+                console.error('Could not find prompt dropdown elements');
+            }
+        });
+
         // Form submission handling
         document.addEventListener('DOMContentLoaded', function() {
-            const form = document.querySelector('form[action="/analyze"]');
-            const submitButton = form.querySelector('button[type="submit"]');
+            const form = document.getElementById('analyzeForm');
+            const submitButton = document.getElementById('analyzeButton');
             const loadingDiv = document.getElementById('loading');
             const abortButton = document.getElementById('abortButton');
+            const resultDiv = document.getElementById('result');
+            const promptInput = document.getElementById('prompt');
+            const modelSelector = document.getElementById('model');
             
-            form.addEventListener('submit', function(e) {
+            console.log('Form elements:', {
+                form: form,
+                submitButton: submitButton,
+                loadingDiv: loadingDiv,
+                abortButton: abortButton,
+                resultDiv: resultDiv,
+                promptInput: promptInput,
+                modelSelector: modelSelector
+            });
+            
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                console.log('Form submitted');
+                
+                const model = modelSelector.value;
+                const prompt = promptInput.value;
+                console.log('Model:', model);
+                console.log('Prompt:', prompt);
+                
+                if (!model || !prompt) {
+                    console.error('Model or prompt is missing');
+                    if (resultDiv) {
+                        resultDiv.textContent = 'Error: Please select a model and enter a prompt';
+                    }
+                    return;
+                }
+                
                 if (isAnalyzing) {
-                    e.preventDefault();
+                    console.log('Already analyzing, ignoring submit');
                     return;
                 }
                 
@@ -38,10 +111,88 @@
                 submitButton.textContent = 'Analyzing...';
                 loadingDiv.classList.remove('hidden');
                 abortButton.classList.remove('hidden');
+                
+                if (resultDiv) {
+                    resultDiv.textContent = ''; // Clear previous results
+                }
+                
+                try {
+                    console.log('Starting analysis request');
+                    const formData = new FormData(form);
+                    console.log('Form data:', Object.fromEntries(formData));
+                    
+                    const response = await fetch('/analyze', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        }
+                    });
+                    
+                    console.log('Got response:', response);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let fullResponse = '';
+                    
+                    while (true) {
+                        const {value, done} = await reader.read();
+                        if (done) {
+                            console.log('Stream complete');
+                            break;
+                        }
+                        
+                        const text = decoder.decode(value);
+                        console.log('Received chunk:', text);
+                        const lines = text.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.trim() && line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    console.log('Parsed data:', data);
+                                    if (data.chunk) {
+                                        fullResponse += data.chunk;
+                                        if (resultDiv) {
+                                            resultDiv.textContent = fullResponse;
+                                        }
+                                    } else if (data.error) {
+                                        throw new Error(data.error);
+                                    } else if (data.done) {
+                                        console.log('Analysis complete');
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing SSE data:', e);
+                                }
+                            }
+                        }
+                    }
+                    
+                    console.log('Analysis finished successfully');
+                    
+                } catch (error) {
+                    console.error('Error:', error);
+                    if (resultDiv) {
+                        resultDiv.textContent = `Error: ${error.message}`;
+                    }
+                } finally {
+                    isAnalyzing = false;
+                    submitButton.disabled = false;
+                    submitButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                    submitButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+                    submitButton.textContent = 'Analyze';
+                    loadingDiv.classList.add('hidden');
+                    abortButton.classList.add('hidden');
+                }
             });
 
             // Abort button handling
             abortButton.addEventListener('click', function() {
+                console.log('Abort clicked');
                 fetch('/abort', {
                     method: 'POST',
                     headers: {
@@ -49,20 +200,21 @@
                         'X-CSRFToken': '{{ csrf_token() }}'
                     }
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        // Reset UI state
-                        isAnalyzing = false;
-                        submitButton.disabled = false;
-                        submitButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
-                        submitButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-                        submitButton.textContent = 'Analyze';
-                        loadingDiv.classList.add('hidden');
-                        abortButton.classList.add('hidden');
-                    } else {
-                        console.error('Error aborting:', data.message);
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
                     }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Analysis aborted:', data);
+                    isAnalyzing = false;
+                    submitButton.disabled = false;
+                    submitButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                    submitButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+                    submitButton.textContent = 'Analyze';
+                    loadingDiv.classList.add('hidden');
+                    abortButton.classList.add('hidden');
                 })
                 .catch(error => {
                     console.error('Error:', error);
@@ -264,51 +416,39 @@
 
                             <!-- Model Manager -->
                             <div class="bg-white rounded-lg shadow p-4 mb-4">
-                                <div class="flex justify-between items-center mb-4">
-                                    <div class="flex items-center space-x-2">
-                                        <h2 class="text-lg font-semibold">Model Manager</h2>
-                                        <div id="ollamaStatus" class="flex items-center">
-                                            <span class="relative flex h-3 w-3">
-                                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75"></span>
-                                                <span class="relative inline-flex rounded-full h-3 w-3 bg-gray-500"></span>
-                                            </span>
-                                            <span class="ml-2 text-sm text-gray-500">Checking Ollama...</span>
-                                        </div>
-                                    </div>
-                                    <div class="space-x-2">
-                                        <button id="refreshModels" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
-                                            Refresh Models
-                                        </button>
-                                        <button id="browseLibrary" class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">
-                                            Browse Library
-                                        </button>
-                                    </div>
+                                <div class="flex items-center mb-2">
+                                    <h2 class="text-lg font-semibold">Model Manager</h2>
                                 </div>
 
-                                <!-- Error Message -->
-                                <div id="errorMessage" class="hidden text-red-600 text-sm mb-4"></div>
+                                <div class="flex items-center space-x-4 mb-3">
+                                    <div id="ollamaStatus" class="flex items-center">
+                                        <span class="relative flex h-3 w-3">
+                                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75"></span>
+                                            <span class="relative inline-flex rounded-full h-3 w-3 bg-gray-500"></span>
+                                        </span>
+                                        <span class="ml-2 text-sm text-gray-500">Checking Ollama...</span>
+                                    </div>
+                                    <button id="refreshModels" class="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600">
+                                        Refresh Models
+                                    </button>
+                                </div>
 
-                                <!-- Model Selector -->
-                                <div class="mb-4">
+                                <div id="errorMessage" class="hidden text-red-600 text-sm mb-3"></div>
+
+                                <div class="mb-3">
                                     <label for="modelSelector" class="block text-sm font-medium text-gray-700">Current Model</label>
                                     <select id="modelSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                                         <option value="">Select a model</option>
                                     </select>
                                 </div>
 
-                                <!-- Local Models -->
-                                <div class="mb-4">
-                                    <h3 class="text-sm font-medium text-gray-700 mb-2">Local Models</h3>
-                                    <div id="localModelsList" class="border rounded-md divide-y divide-gray-200">
-                                        <!-- Local models will be inserted here -->
-                                    </div>
-                                </div>
+                                <button id="browseLibrary" class="w-full px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600">
+                                    Pull Model
+                                </button>
 
-                                <!-- Library Models -->
-                                <div id="libraryModels" class="hidden">
+                                <div id="libraryModels" class="hidden mt-3">
                                     <h3 class="text-sm font-medium text-gray-700 mb-2">Available Models</h3>
                                     <div id="modelsList" class="border rounded-md divide-y divide-gray-200">
-                                        <!-- Library models will be inserted here -->
                                     </div>
                                 </div>
                             </div>
@@ -317,45 +457,25 @@
                                 <!-- Current Analysis Section -->
                                 <div class="bg-white shadow sm:rounded-lg">
                                     <div class="px-4 py-5 sm:p-6">
-                                        <form method="post" action="/analyze" enctype="multipart/form-data">
+                                        <form id="analyzeForm" method="post" action="/analyze" enctype="multipart/form-data">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             
-                                            <!-- Hidden Model Selection (updated by model-manager) -->
+                                            <!-- Hidden Model Input -->
                                             <input type="hidden" id="model" name="model" value="{{ model }}">
-                                            
-                                            <!-- File Upload Section -->
-                                            <div id="fileSection" class="mb-6">
-                                                <div class="flex items-center">
-                                                    <label id="fileLabel" for="file" class="block text-sm font-medium text-gray-700">Upload File:</label>
-                                                    <span id="fileRequired" class="ml-2 text-sm text-gray-500">(Optional)</span>
-                                                </div>
-                                                <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                                                    <div class="space-y-1 text-center">
-                                                        <div class="flex text-sm text-gray-600">
-                                                            <label for="file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
-                                                                <span>Upload a file</span>
-                                                                <input id="file" name="file" type="file" class="sr-only">
-                                                            </label>
-                                                        </div>
-                                                        <p id="fileDescription" class="text-xs text-gray-500">Upload an image to analyze</p>
-                                                    </div>
-                                                </div>
-                                            </div>
 
-                                            <!-- Prompt input and suggestions -->
-                                            <div class="space-y-2">
-                                                <div class="relative">
-                                                    <textarea id="prompt" name="prompt" rows="3"
-                                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                                        placeholder="Enter your prompt here...">{{ default_prompt }}</textarea>
+                                            <!-- Prompt Input -->
+                                            <div class="mb-6">
+                                                <label for="prompt" class="block text-sm font-medium text-gray-700">Prompt</label>
+                                                <div class="mt-1 relative">
+                                                    <textarea id="prompt" name="prompt" rows="4"
+                                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                                        placeholder="Enter your prompt here">{{ prompt if prompt else default_prompt }}</textarea>
                                                 </div>
                                                 
                                                 <!-- Prompt Suggestions Dropdown -->
                                                 <div class="relative inline-block text-left mt-2">
                                                     <button type="button" id="promptDropdownButton"
-                                                        class="inline-flex justify-center w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                                        aria-expanded="false"
-                                                        aria-haspopup="true">
+                                                        class="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                                                         Suggested Prompts
                                                         <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                                             <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -366,21 +486,39 @@
                                                         role="menu"
                                                         aria-orientation="vertical"
                                                         aria-labelledby="promptDropdownButton">
+                                                        <div class="py-1" role="none">
+                                                            {% if prompt_suggestions %}
+                                                                {% for suggestion in prompt_suggestions %}
+                                                                <button type="button"
+                                                                    class="text-left w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                                                    role="menuitem"
+                                                                    onclick="document.getElementById('prompt').value = this.textContent.trim()">
+                                                                    {{ suggestion }}
+                                                                </button>
+                                                                {% endfor %}
+                                                            {% else %}
+                                                                <div class="px-4 py-2 text-sm text-gray-500">No suggestions available</div>
+                                                            {% endif %}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
 
+                                            <!-- File Upload -->
+                                            <div class="mb-6">
+                                                <label for="file" class="block text-sm font-medium text-gray-700">Image (optional)</label>
+                                                <input type="file" id="file" name="file" accept="image/*"
+                                                    class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">
+                                            </div>
+
                                             <!-- Submit Button -->
                                             <div class="flex justify-center space-x-4">
-                                                <button type="submit" 
-                                                    class="inline-flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                                    {% if isAnalyzing %}disabled{% endif %}>
-                                                    <span>Analyze</span>
+                                                <button type="submit" id="analyzeButton"
+                                                    class="inline-flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                                                    Analyze
                                                 </button>
-                                                <button type="button" 
-                                                    id="abortButton"
-                                                    class="hidden inline-flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                                                    onclick="return false;">
+                                                <button type="button" id="abortButton"
+                                                    class="hidden inline-flex items-center justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
                                                     Abort
                                                 </button>
                                             </div>
@@ -389,20 +527,18 @@
                                         <!-- Loading indicator -->
                                         <div id="loading" class="hidden mt-6">
                                             <div class="flex items-center justify-center space-x-3 bg-gray-50 p-4 rounded-md">
-                                                <div class="animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
-                                                <p id="loadingText" class="text-gray-700">Processing...</p>
+                                                <div class="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-indigo-500"></div>
+                                                <span class="text-gray-700">Analyzing...</span>
                                             </div>
                                         </div>
 
-                                        <!-- Results Section -->
-                                        {% if result %}
+                                        <!-- Result display -->
                                         <div class="mt-6">
-                                            <h2 class="text-lg font-medium text-gray-900 mb-2">Results:</h2>
-                                            <div class="bg-gray-50 rounded-lg p-4">
-                                                <pre class="whitespace-pre-wrap text-sm text-gray-700">{{ result }}</pre>
+                                            <div class="bg-gray-50 p-4 rounded-md">
+                                                <pre id="result" class="whitespace-pre-wrap text-gray-700">{% if result %}{{ result }}{% endif %}</pre>
                                             </div>
                                         </div>
-                                        {% endif %}
+
                                     </div>
                                 </div>
 

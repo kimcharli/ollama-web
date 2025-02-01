@@ -18,6 +18,10 @@ dependencies = [
     "pytest-html>=4.1.1",
     "pytest-xdist>=3.6.1",
     "selenium>=4.17.2",
+    "flask-session>=0.8.0",
+    "flask-sqlalchemy>=3.1.1",
+    "fakeredis>=2.26.2",
+    "redis>=5.2.1",
 ]
 requires-python = ">=3.10"
 
@@ -65,4 +69,8 @@ filterwarnings = [
 ]
 pythonpath = [
     "."
+]
+markers = [
+    "unit: mark a test as a unit test",
+    "integration: mark a test as an integration test"
 ]

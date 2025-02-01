@@ -302,5 +302,125 @@
     "result": "Response (took 6.04 seconds):\n\nThe capital city of France is Paris.",
     "duration": 6.037107,
     "success": true
+  },
+  {
+    "timestamp": "2025-01-31T22:13:43.165645",
+    "model": "llama2-uncensored",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 1.22 seconds):\n\nThe capital of France is Paris.",
+    "duration": 1.22109,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T22:17:44.624872",
+    "model": "llama2-uncensored",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 1.72 seconds):\n\nThe capital of France is Paris.",
+    "duration": 1.718308,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T22:19:28.692456",
+    "model": "artifish/llama3.2-uncensored",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 2.75 seconds):\n\nParis",
+    "duration": 2.751173,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T22:21:55.926423",
+    "model": "llama2-uncensored",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 2.82 seconds):\n\nThe capital of France is Paris.",
+    "duration": 2.822694,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T22:32:51.028048",
+    "model": "llama2-uncensored",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 2.05 seconds):\n\nThe capital of France is Paris.",
+    "duration": 2.052046,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:24:00.354594",
+    "model": "artifish/llama3.2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "Response (took 4.98 seconds):\n\nAccording to the latest available data from the Korean government's National Statistical Office (2022 estimate), the total population of South Korea is approximately 51.81 million people.\r\n\r\nFor North Korea, the population figure is more difficult to determine due to the secretive nature of the regime. However, according to the United Nations, the estimated population of North Korea is around 25-26 million people (2022 estimate).\r\n\r\nPlease note that these numbers may have changed slightly since the last official update.",
+    "duration": 4.978271007537842,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:27:40.826845",
+    "model": "artifish/llama3.2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "Response (took 3.38 seconds):\n\nAccording to the latest available data from reputable sources, such as the South Korean government's official statistics and international demographic organizations, I can provide you with the population figures for Korea.\r\n\r\nAs of 2021, the estimated population of South Korea is approximately 51.8 million people.\r\nFor North Korea, due to the lack of reliable and up-to-date information from the government, estimates vary widely, but the generally accepted figure is around 25-26 million people, based on UN reports and other sources.\r\n\r\nPlease note that these numbers may have changed slightly since the last official update, but they should give you a general idea of the population dynamics in Korea.",
+    "duration": 3.3800971508026123,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:31:56.778469",
+    "model": "artifish/llama3.2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "According to the latest available data from reliable sources, including the Korean government's official statistics and international demographic organizations, the estimated population of South Korea as of 2023 is approximately 51.8 million people.\r\nThe population of North Korea is significantly lower, with estimates ranging from 25-26 million people, due to ongoing economic sanctions, food shortages, and other factors affecting the country's ability to collect accurate census data.\r\nPlease note that these numbers are subject to change and might not reflect the most up-to-date figures.",
+    "duration": 2.7316439151763916,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:33:34.839154",
+    "model": "llama2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "According to the latest estimates from the World Bank, the total population of South Korea stands at approximately 52 million people.",
+    "duration": 1.1294591426849365,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:36:50.214059",
+    "model": "llama2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "According to the most recent census data, the total population of South Korea as of 2019 was 51.8 million people.",
+    "duration": 1.3410539627075195,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:40:38.943636",
+    "model": "llama2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "As of July 2019, the population of South Korea was estimated to be around 51.8 million people.",
+    "duration": 1.1734631061553955,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:43:20.332383",
+    "model": "llama2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "As of 2021, the population of South Korea was approximately 51.9 million people, while North Korea had a population of around 25.4 million.",
+    "duration": 1.629728078842163,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:55:08.104641",
+    "model": "llama2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "As of 2021, the estimated population of South Korea is around 52 million.",
+    "duration": 0.9631459712982178,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:57:27.545979",
+    "model": "llama2-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "According to recent estimates, the population of Korea as of 2021 is around 52 million.",
+    "duration": 1.0500810146331787,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T23:57:49.479001",
+    "model": "wizard-vicuna-uncensored",
+    "prompt": "What is the population of Korea?",
+    "result": "As of 2017, the population of South Korea was approximately 51.4 million people and that of North Korea was approximately 25.3 million people.",
+    "duration": 1.6390271186828613,
+    "success": true
   }
 ]

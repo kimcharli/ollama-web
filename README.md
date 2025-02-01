@@ -201,3 +201,7 @@ llama-vision/
 ## Contributing
 
 Please see our [design document](design.md) for current features and planned enhancements. Contributions are welcome!
+
+## License
+
+[MIT License](LICENSE)

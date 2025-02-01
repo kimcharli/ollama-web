@@ -4,10 +4,11 @@ import logging
 import requests
 import base64
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, Response
 from werkzeug.utils import secure_filename
 from config import Config
 from history_manager import HistoryManager
+from fetch_manager import FetchManager
 import json
 
 # Configure logging
@@ -29,6 +30,9 @@ csrf = CSRFProtect(app)
 
 # Initialize history manager
 history_manager = HistoryManager(app.config['HISTORY_FILE'], app.config['MAX_HISTORY_ENTRIES'])
+
+# Initialize fetch manager
+fetch_manager = FetchManager()
 
 # Load prompts from JSON file
 try:
@@ -399,6 +403,87 @@ def clear_history():
     except Exception as e:
         logger.exception('Error clearing history')
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/fetch/models', methods=['POST'])
+@csrf.exempt
+def fetch_models():
+    """Fetch list of available models."""
+    try:
+        models_data = fetch_manager.fetch_models_list()
+        if models_data is None:
+            return jsonify({'error': 'Failed to fetch models'}), 500
+        logger.info(f"Returning models data: {models_data}")
+        return jsonify(models_data)
+    except Exception as e:
+        logger.error(f"Error in fetch_models: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/current-model', methods=['GET'])
+def get_current_model():
+    """Get the currently selected model."""
+    try:
+        selected_model = session.get('selected_model')
+        logger.info(f"Current model: {selected_model}")
+        return jsonify({'model': selected_model})
+    except Exception as e:
+        logger.error(f"Error getting current model: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/select-model', methods=['POST'])
+@csrf.exempt
+def api_select_model():
+    """Select a model to use."""
+    try:
+        model = request.json.get('model')
+        if not model:
+            logger.error("Model name is required")
+            return jsonify({'error': 'Model name is required'}), 400
+            
+        # Store selected model in session
+        session['selected_model'] = model
+        logger.info(f"Selected model: {model}")
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        logger.error(f"Error selecting model: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/library/models', methods=['GET'])
+def get_library_models():
+    """Get available models from Ollama library."""
+    try:
+        models_data = fetch_manager.get_library_models()
+        if models_data is None:
+            return jsonify({'error': 'Failed to fetch library models'}), 500
+        return jsonify(models_data)
+    except Exception as e:
+        logger.error(f"Error in get_library_models: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/pull/model', methods=['POST'])
+@csrf.exempt
+def pull_model():
+    """Pull a model from Ollama library."""
+    try:
+        model_name = request.json.get('name')
+        if not model_name:
+            return jsonify({'error': 'Model name is required'}), 400
+            
+        def generate():
+            try:
+                for progress in fetch_manager.pull_model(model_name):
+                    if progress:
+                        # Add event type for SSE
+                        yield f"event: progress\ndata: {json.dumps(progress)}\n\n"
+                # Send done event
+                yield f"event: done\ndata: {json.dumps({'status': 'complete'})}\n\n"
+            except Exception as e:
+                logger.error(f"Error pulling model: {e}")
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                
+        return Response(generate(), mimetype='text/event-stream')
+    except Exception as e:
+        logger.error(f"Error in pull_model: {e}")
+        return jsonify({'error': str(e)}), 500
 
 def get_history_prompts(history, model_type, limit=3):
     """Get unique prompts from history for a specific model type."""

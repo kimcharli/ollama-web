@@ -270,5 +270,37 @@
     "result": "Response (took 30.94 seconds):\n\nBGP (Border Gateway Protocol) communities are a feature used in network routing to apply specific policies or attributes to routes. The notation \"0:14\" represents a BGP community value where:\n\n- The first part (`0`) is the autonomous system number (ASN) that defined this particular community.\n- The second part (`14`) is the local identifier for the community.\n\n### Official Documentation\n\n1. **RFC 1997 - BGP Communities Attribute**: This document introduces and describes the use of communities in BGP. It provides an overview of how communities can be used to group routes for policy decisions.\n   - [RFC 1997](https://datatracker.ietf.org/doc/html/rfc1997)\n\n2. **IETF BGP MIB (RFC 2856)**: Although primarily focused on the Management Information Base, it includes references to community attributes and their use in routing policies.\n   - [RFC 2856](https://datatracker.ietf.org/doc/html/rfc2856)\n\n3. **IANA Considerations for the BGP Communities Attribute**: This document provides details about how community values are managed by IANA (Internet Assigned Numbers Authority) and includes a list of well-known communities.\n   - [IANA Community Registry](https://www.iana.org/assignments/bgp-parameters/bgp-parameters.xhtml#bgp-communities)\n\n4. **Operational Experience with BGP Communities**: While not an official RFC, this document by the IETF offers insights into how different networks apply community values like \"0:14\" in practice.\n   - [IETF BGPMON](https://datatracker.ietf.org/public/rfc/bibxml?keyword=bgp%20communities)\n\n### Usage of Community 0:14\n\n- **Private Use**: The `0` prefix is often used for private or locally defined communities, meaning the community `0:14` could be specific to a particular organization's internal policy.\n- **Well-known Communities**: While some communities are well-known and standardized (e.g., `no-export`, `local-as`), others like `0:14` may not have an explicit definition outside of their local use case.\n\nTo fully understand the purpose of community `0:14` in a specific context, you would need to refer to internal documentation or policy definitions from the network administrator or organization that uses it.",
     "duration": 30.937396,
     "success": true
+  },
+  {
+    "timestamp": "2025-01-31T21:11:31.746406",
+    "model": "artifish/llama3.2-uncensored:latest",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 5.79 seconds):\n\nParis",
+    "duration": 5.786154,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T22:08:31.398773",
+    "model": "artifish/llama3.2-uncensored",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 3.87 seconds):\n\nParis",
+    "duration": 3.868522,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T22:09:12.686965",
+    "model": "artifish/llama3.2-uncensored",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 0.24 seconds):\n\nParis",
+    "duration": 0.23575,
+    "success": true
+  },
+  {
+    "timestamp": "2025-01-31T22:09:42.318694",
+    "model": "llama2-uncensored",
+    "prompt": "What is the capital of France?",
+    "result": "Response (took 6.04 seconds):\n\nThe capital city of France is Paris.",
+    "duration": 6.037107,
+    "success": true
   }
 ]

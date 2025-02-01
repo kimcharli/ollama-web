@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollama Vision & Text Analysis</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{{ url_for('static', filename='js/fetch-button.js') }}"></script>
     <script>
         // Global variables
         let defaultPrompt = "{{ default_prompt | default('') | safe }}";
@@ -252,40 +253,66 @@
                             <h1 class="text-2xl font-bold text-center mb-8 text-indigo-600">Ollama Vision & Text Analysis</h1>
                             
                             <!-- Navigation -->
-                            <div class="flex justify-between items-center mb-8">
+                            <div class="flex justify-end items-center mb-8">
                                 <a href="/" class="text-indigo-600 hover:text-indigo-500 font-medium flex items-center">
                                     <svg class="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                         <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
                                     </svg>
                                     Home
                                 </a>
-                                <div class="relative inline-block text-left">
-                                    <button type="button" id="debugButton"
-                                        class="inline-flex justify-center w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                        onclick="toggleDebugDropdown()">
-                                        Debug Level: {{ current_debug_level }}
-                                        <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                        </svg>
-                                    </button>
-                                    <div id="debugDropdown"
-                                        class="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none"
-                                        role="menu" aria-orientation="vertical" aria-labelledby="debugButton">
-                                        <div class="py-1" role="none">
-                                            {% for level in debug_levels %}
-                                            <button type="button"
-                                                class="text-left w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 {% if level == current_debug_level %}bg-gray-100{% endif %}"
-                                                role="menuitem"
-                                                onclick="setDebugLevel('{{ level }}')">
-                                                {{ level }}
-                                            </button>
-                                            {% endfor %}
+                            </div>
+
+                            <!-- Model Manager -->
+                            <div class="bg-white rounded-lg shadow p-4 mb-4">
+                                <div class="flex justify-between items-center mb-4">
+                                    <div class="flex items-center space-x-2">
+                                        <h2 class="text-lg font-semibold">Model Manager</h2>
+                                        <div id="ollamaStatus" class="flex items-center">
+                                            <span class="relative flex h-3 w-3">
+                                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75"></span>
+                                                <span class="relative inline-flex rounded-full h-3 w-3 bg-gray-500"></span>
+                                            </span>
+                                            <span class="ml-2 text-sm text-gray-500">Checking Ollama...</span>
                                         </div>
+                                    </div>
+                                    <div class="space-x-2">
+                                        <button id="refreshModels" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                                            Refresh Models
+                                        </button>
+                                        <button id="browseLibrary" class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">
+                                            Browse Library
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Error Message -->
+                                <div id="errorMessage" class="hidden text-red-600 text-sm mb-4"></div>
+
+                                <!-- Model Selector -->
+                                <div class="mb-4">
+                                    <label for="modelSelector" class="block text-sm font-medium text-gray-700">Current Model</label>
+                                    <select id="modelSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+                                        <option value="">Select a model</option>
+                                    </select>
+                                </div>
+
+                                <!-- Local Models -->
+                                <div class="mb-4">
+                                    <h3 class="text-sm font-medium text-gray-700 mb-2">Local Models</h3>
+                                    <div id="localModelsList" class="border rounded-md divide-y divide-gray-200">
+                                        <!-- Local models will be inserted here -->
+                                    </div>
+                                </div>
+
+                                <!-- Library Models -->
+                                <div id="libraryModels" class="hidden">
+                                    <h3 class="text-sm font-medium text-gray-700 mb-2">Available Models</h3>
+                                    <div id="modelsList" class="border rounded-md divide-y divide-gray-200">
+                                        <!-- Library models will be inserted here -->
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Main Content -->
                             <div class="space-y-8">
                                 <!-- Current Analysis Section -->
                                 <div class="bg-white shadow sm:rounded-lg">
@@ -293,17 +320,9 @@
                                         <form method="post" action="/analyze" enctype="multipart/form-data">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             
-                                            <!-- Model Selection -->
-                                            <div class="mb-6">
-                                                <label for="model" class="block text-sm font-medium text-gray-700">Select Model:</label>
-                                                <select id="model" name="model" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                                                    {% for model in models %}
-                                                        <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
-                                                    {% endfor %}
-                                                </select>
-                                                <div id="modelMessage" class="hidden mt-2 text-sm"></div>
-                                            </div>
-
+                                            <!-- Hidden Model Selection (updated by model-manager) -->
+                                            <input type="hidden" id="model" name="model" value="{{ model }}">
+                                            
                                             <!-- File Upload Section -->
                                             <div id="fileSection" class="mb-6">
                                                 <div class="flex items-center">
@@ -443,5 +462,23 @@
             </div>
         </div>
     </div>
+    <script>
+        // Add event listeners for model-manager
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOMContentLoaded: Setting up model-manager listeners');
+            const modelManager = document.getElementById('modelManager');
+            console.log('Found model-manager:', modelManager);
+            
+            modelManager.addEventListener('modelSelected', (event) => {
+                console.log('Model selected:', event.detail.model);
+                document.getElementById('model').value = event.detail.model;
+            });
+
+            modelManager.addEventListener('modelPulled', (event) => {
+                console.log('Model pulled:', event.detail.model);
+            });
+        });
+    </script>
+    <script type="module" src="{{ url_for('static', filename='js/model-manager.js') }}"></script>
 </body>
 </html>

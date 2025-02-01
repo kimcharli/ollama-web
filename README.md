@@ -4,12 +4,13 @@ A web application that leverages Ollama's models to analyze both images and docu
 
 ## Features
 
-- 🖼️ **Universal Analysis**: Support for both images and documents
-  - Vision models: Analyze images with state-of-the-art vision capabilities
-  - Text models: Process documents and text with advanced language models
+- 🖼️ **Universal File Support**: 
+  - Optional file upload for all models
+  - Image analysis with base64 encoding
+  - Streamlined interface without model-specific restrictions
 - 🤖 **Multiple Models**: Support for various models (llama2, llava, etc.)
 - 🔄 **Real-time Model Discovery**: Automatically discovers available models from your local Ollama installation
-- 📝 **Dynamic Prompts**: Context-aware prompts based on model type
+- 📝 **Dynamic Prompts**: Suggested prompts and history-based suggestions
 - 🔍 **Debug Levels**: Adjustable logging levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 - 📊 **Analysis History**: 
   - Persistent storage in query_history.json
@@ -28,6 +29,10 @@ A web application that leverages Ollama's models to analyze both images and docu
   - Visual loading spinner
   - Button disabled during analysis
 - 🏠 **Home Navigation**: Easy navigation with modern UI
+- 🔁 **Streaming Response Support**: 
+  - Handles streaming responses from Ollama API
+  - Concatenates partial responses for complete output
+  - Shows accurate timing information
 
 ## Prerequisites
 
@@ -66,7 +71,7 @@ A web application that leverages Ollama's models to analyze both images and docu
    ```bash
    uv run app.py
    ```
-   The application will be available at http://127.0.0.1:5000
+   The application will be available at http://127.0.0.1:5001 by default (configurable in .env)
 
 ## Usage
 
@@ -75,23 +80,20 @@ A web application that leverages Ollama's models to analyze both images and docu
    - Click the refresh button to update the model list
    - Models are automatically discovered from your Ollama installation
 
-2. **Upload a File** (if needed):
-   - For vision models:
-     - Required file upload
-     - Supported formats: JPG, PNG, GIF, BMP, WebP
-   - For text models:
-     - Optional file upload
-     - Supported formats: TXT, MD, PDF, DOC, DOCX, CSV, JSON
+2. **Upload a File** (Optional):
+   - Any model can process images
+   - Upload an image to analyze its contents
+   - File upload is always optional
 
 3. **Enter or Select a Prompt**:
-   - Dynamic prompt suggestions based on model type
-   - Custom prompt input available
-   - Clear prompt guidance based on model capabilities
+   - Use suggested prompts from the dropdown
+   - Previous prompts from history are available
+   - Enter custom prompts as needed
 
 4. **Analyze**:
    - Click "Analyze" to process
    - View progress with loading indicator
-   - See timing information in results
+   - See complete response with timing information
 
 5. **View History**:
    - Scroll through previous analyses

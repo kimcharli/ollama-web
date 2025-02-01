@@ -8,23 +8,21 @@ A web application built with Flask and the Ollama API for image and document ana
 ### Model Management
 - [x] Dynamic model discovery from Ollama
 - [x] Persistent model selection across sessions
-- [x] Automatic detection of model capabilities (vision vs. text)
 - [x] Model refresh functionality
+- [x] Universal file handling for all models
 
 ### File Handling
-- [x] Dynamic file type validation based on model type
-- [x] Support for vision models (images)
-  - Supported formats: jpg, jpeg, png, gif, bmp, webp
-- [x] Support for text models (documents)
-  - Supported formats: txt, md, pdf, doc, docx, csv, json
-- [x] Optional file upload for text models
-- [x] Required file upload for vision models
+- [x] Optional file upload for all models
+- [x] Base64 image encoding for API requests
+- [x] Automatic file cleanup after processing
+- [x] Secure file handling with validation
 
 ### Prompt Management
-- [x] Dynamic prompt selection based on model type
+- [x] Universal prompt suggestions
 - [x] Quick prompt suggestions
 - [x] Custom prompt input
 - [x] Persistent prompt history
+- [x] History-based prompt suggestions
 
 ### Debug Features
 - [x] Configurable debug levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -56,6 +54,14 @@ A web application built with Flask and the Ollama API for image and document ana
 - [x] Home navigation with icon
 - [x] Clear error messages and validation feedback
 - [x] Collapsible sections for better space management
+- [x] Consistent file upload section for all models
+
+### API Integration
+- [x] Streaming response handling
+- [x] Response concatenation for complete output
+- [x] Error handling for partial responses
+- [x] JSON parsing for each response chunk
+- [x] Accurate timing information
 
 ### Security
 - [x] CSRF protection
@@ -70,6 +76,7 @@ A web application built with Flask and the Ollama API for image and document ana
   - File storage paths (uploads, history file)
   - History management (max entries)
   - Ollama host configuration
+  - Port configuration
 - [x] Default values for all settings
 - [x] Easy deployment configuration
 - [x] Centralized config management in `config.py`
@@ -82,6 +89,7 @@ A web application built with Flask and the Ollama API for image and document ana
 - Session management
 - File upload handling
 - Logging system
+- Streaming response handling
 
 ### Frontend
 - Tailwind CSS for styling
